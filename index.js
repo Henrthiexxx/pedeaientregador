@@ -193,7 +193,7 @@ async function loadPlatformConfig() {
 async function loadAvailableOrders() {
     try {
         const snapshot = await db.collection('orders')
-            .where('status', '==', 'ready')
+            .where('status', 'in', ['preparing', 'ready'])
             .get();
 
         availableOrders = snapshot.docs
@@ -263,7 +263,7 @@ async function loadTodayHistory() {
 function setupRealtimeListeners() {
     // Available orders
     db.collection('orders')
-        .where('status', '==', 'ready')
+        .where('status', 'in', ['preparing', 'ready'])
         .onSnapshot(snapshot => {
             const prevCount = availableOrders.length;
             availableOrders = snapshot.docs
