@@ -1,0 +1,1253 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Pedrad - Entregador</title>
+    <meta name="theme-color" content="#22c55e">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        :root {
+            --primary: #22c55e;
+            --primary-dark: #16a34a;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --info: #3b82f6;
+            --bg: #0f0f1a;
+            --bg-card: #1a1a2e;
+            --bg-input: #252540;
+            --text: #ffffff;
+            --text-muted: #94a3b8;
+            --border: #334155;
+            --radius: 16px;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            padding-bottom: 80px;
+        }
+        
+        /* Header */
+        .header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 60px;
+            background: var(--bg-card);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 16px;
+            z-index: 100;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .header-title {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--primary);
+        }
+        
+        .header-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--danger);
+        }
+        
+        .status-dot.online { background: var(--primary); }
+        
+        .status-text {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+        
+        /* Toggle */
+        .toggle {
+            width: 52px;
+            height: 28px;
+            background: var(--border);
+            border-radius: 14px;
+            position: relative;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .toggle.active { background: var(--primary); }
+        
+        .toggle::after {
+            content: '';
+            position: absolute;
+            width: 22px;
+            height: 22px;
+            background: white;
+            border-radius: 50%;
+            top: 3px;
+            left: 3px;
+            transition: all 0.2s;
+        }
+        
+        .toggle.active::after { left: 27px; }
+        
+        /* Navigation */
+        .nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 70px;
+            background: var(--bg-card);
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            z-index: 100;
+            border-top: 1px solid var(--border);
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+        
+        .nav-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            color: var(--text-muted);
+            font-size: 0.75rem;
+            cursor: pointer;
+            padding: 8px 20px;
+            border-radius: 12px;
+            transition: all 0.2s;
+        }
+        
+        .nav-item.active {
+            color: var(--primary);
+            background: rgba(34, 197, 94, 0.1);
+        }
+        
+        .nav-item span { font-size: 1.4rem; }
+        
+        .nav-badge {
+            position: absolute;
+            top: -4px;
+            right: -4px;
+            background: var(--danger);
+            color: white;
+            font-size: 0.65rem;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+        }
+        
+        /* Pages */
+        .page {
+            display: none;
+            padding: 76px 16px 20px;
+            min-height: 100vh;
+            animation: fadeIn 0.3s ease;
+        }
+        
+        .page.active { display: block; }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* Stats Cards */
+        .stats-row {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-card {
+            background: var(--bg-card);
+            border-radius: var(--radius);
+            padding: 16px;
+            text-align: center;
+            border: 1px solid var(--border);
+        }
+        
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+        
+        .stat-value.money { color: var(--primary); }
+        
+        .stat-label {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+        
+        /* Section Title */
+        .section-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        /* Delivery Card */
+        .delivery-card {
+            background: var(--bg-card);
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            margin-bottom: 12px;
+            overflow: hidden;
+        }
+        
+        .delivery-card.urgent {
+            border-color: var(--warning);
+            animation: pulse-border 2s infinite;
+        }
+        
+        @keyframes pulse-border {
+            0%, 100% { border-color: var(--warning); }
+            50% { border-color: var(--danger); }
+        }
+        
+        .delivery-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .delivery-store {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .delivery-store-icon {
+            width: 40px;
+            height: 40px;
+            background: var(--bg-input);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.3rem;
+        }
+        
+        .delivery-store-name { font-weight: 600; }
+        .delivery-store-time { font-size: 0.8rem; color: var(--text-muted); }
+        
+        .delivery-value {
+            text-align: right;
+        }
+        
+        .delivery-fee {
+            font-weight: 700;
+            color: var(--primary);
+            font-size: 1.1rem;
+        }
+        
+        .delivery-distance {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+        
+        .delivery-body {
+            padding: 14px 16px;
+        }
+        
+        .delivery-address {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+        
+        .address-icon {
+            width: 32px;
+            height: 32px;
+            background: var(--bg-input);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        
+        .address-info { flex: 1; }
+        .address-label { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 2px; }
+        .address-text { font-size: 0.9rem; }
+        
+        .delivery-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 14px;
+        }
+        
+        /* Buttons */
+        .btn {
+            flex: 1;
+            padding: 12px 16px;
+            border-radius: 10px;
+            border: none;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+        
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-warning { background: var(--warning); color: black; }
+        .btn-danger { background: var(--danger); color: white; }
+        .btn-secondary { background: var(--bg-input); color: var(--text); }
+        .btn-success { background: var(--primary); color: white; }
+        .btn:hover { opacity: 0.9; transform: scale(1.02); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        .btn-block { width: 100%; }
+        
+        /* Current Delivery */
+        .current-delivery {
+            background: linear-gradient(135deg, var(--bg-card), #1e3a2f);
+            border: 2px solid var(--primary);
+            border-radius: var(--radius);
+            padding: 16px;
+            margin-bottom: 20px;
+        }
+        
+        .current-delivery-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+        
+        .current-delivery-title {
+            font-weight: 700;
+            color: var(--primary);
+        }
+        
+        .current-delivery-status {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+        
+        .status-pickup { background: rgba(245, 158, 11, 0.2); color: var(--warning); }
+        .status-delivering { background: rgba(34, 197, 94, 0.2); color: var(--primary); }
+        
+        .route-line {
+            display: flex;
+            align-items: stretch;
+            gap: 12px;
+            margin: 16px 0;
+        }
+        
+        .route-dots {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+        
+        .route-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--warning);
+        }
+        
+        .route-dot.end { background: var(--primary); }
+        
+        .route-line-connector {
+            width: 2px;
+            flex: 1;
+            background: var(--border);
+            min-height: 40px;
+        }
+        
+        .route-addresses { flex: 1; }
+        
+        .route-address {
+            margin-bottom: 12px;
+        }
+        
+        .route-address:last-child { margin-bottom: 0; }
+        
+        .route-address-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+        
+        .route-address-text {
+            font-weight: 500;
+        }
+        
+        /* History Item */
+        .history-item {
+            background: var(--bg-card);
+            border-radius: var(--radius);
+            padding: 14px 16px;
+            margin-bottom: 10px;
+            border: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .history-info { flex: 1; }
+        .history-store { font-weight: 600; margin-bottom: 2px; }
+        .history-time { font-size: 0.8rem; color: var(--text-muted); }
+        .history-value { font-weight: 700; color: var(--primary); }
+        
+        /* Profile */
+        .profile-header {
+            text-align: center;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .profile-avatar {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, var(--primary), #16a34a);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            margin: 0 auto 12px;
+        }
+        
+        .profile-name { font-size: 1.2rem; font-weight: 700; }
+        .profile-rating { color: var(--warning); margin-top: 4px; }
+        
+        .profile-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        
+        .profile-menu-item {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 14px 16px;
+            background: var(--bg-card);
+            border-radius: var(--radius);
+            margin-bottom: 10px;
+            cursor: pointer;
+            border: 1px solid var(--border);
+        }
+        
+        .profile-menu-icon {
+            width: 42px;
+            height: 42px;
+            background: var(--bg-input);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+        }
+        
+        .profile-menu-text { flex: 1; font-weight: 500; }
+        .profile-menu-arrow { color: var(--text-muted); }
+        
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+        }
+        
+        .empty-state-icon { font-size: 4rem; margin-bottom: 16px; }
+        .empty-state-title { font-size: 1.1rem; font-weight: 600; margin-bottom: 8px; }
+        .empty-state-text { color: var(--text-muted); font-size: 0.9rem; }
+        
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 90px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: var(--bg-card);
+            padding: 12px 24px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            z-index: 300;
+            opacity: 0;
+            transition: all 0.3s;
+        }
+        
+        .toast.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+        
+        /* Auth */
+        .auth-container {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 24px;
+        }
+        
+        .auth-logo {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+        
+        .auth-logo h1 {
+            font-size: 2rem;
+            color: var(--primary);
+        }
+        
+        .auth-logo p {
+            color: var(--text-muted);
+            margin-top: 8px;
+        }
+        
+        .form-group { margin-bottom: 16px; }
+        
+        .form-label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+        
+        .form-input {
+            width: 100%;
+            padding: 14px 16px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            background: var(--bg-input);
+            color: var(--text);
+            font-size: 1rem;
+        }
+        
+        .form-input:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+        
+        /* Confirm Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.8);
+            z-index: 200;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .modal.active { display: flex; }
+        
+        .modal-content {
+            background: var(--bg-card);
+            border-radius: var(--radius);
+            padding: 24px;
+            width: 100%;
+            max-width: 340px;
+            text-align: center;
+        }
+        
+        .modal-icon { font-size: 3rem; margin-bottom: 16px; }
+        .modal-title { font-size: 1.2rem; font-weight: 700; margin-bottom: 8px; }
+        .modal-text { color: var(--text-muted); margin-bottom: 20px; }
+        .modal-actions { display: flex; gap: 12px; }
+    </style>
+</head>
+<body>
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+    
+    <!-- Auth Page -->
+    <div id="authPage" class="auth-container">
+        <div class="auth-logo">
+            <h1>🛵 Pedrad</h1>
+            <p>App do Entregador</p>
+        </div>
+        
+        <div style="background: var(--bg-card); padding: 20px; border-radius: 16px; border: 1px solid var(--border);">
+            <form onsubmit="handleLogin(event)">
+                <div class="form-group">
+                    <label class="form-label">E-mail</label>
+                    <input type="email" class="form-input" id="loginEmail" placeholder="entregador@email.com" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Senha</label>
+                    <input type="password" class="form-input" id="loginPassword" placeholder="••••••••" required>
+                </div>
+                <button type="submit" class="btn btn-primary btn-block">Entrar</button>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Main App -->
+    <div id="mainApp" style="display: none;">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-title">🛵 Pedrad</div>
+            <div class="header-status">
+                <span class="status-text" id="statusText">Offline</span>
+                <div class="toggle" id="onlineToggle" onclick="toggleOnline()"></div>
+            </div>
+        </header>
+        
+        <!-- Home Page -->
+        <div id="homePage" class="page active">
+            <!-- Stats -->
+            <div class="stats-row">
+                <div class="stat-card">
+                    <div class="stat-value money" id="todayEarnings">R$ 0</div>
+                    <div class="stat-label">Ganhos hoje</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="todayDeliveries">0</div>
+                    <div class="stat-label">Entregas</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="todayDistance">0 km</div>
+                    <div class="stat-label">Percorrido</div>
+                </div>
+            </div>
+            
+            <!-- Current Delivery -->
+            <div id="currentDeliverySection" style="display: none;">
+                <div class="section-title">🚀 Entrega Atual</div>
+                <div class="current-delivery" id="currentDelivery"></div>
+            </div>
+            
+            <!-- Available Deliveries -->
+            <div id="availableSection">
+                <div class="section-title">
+                    📦 Entregas Disponíveis
+                    <span id="availableCount" style="background: var(--primary); color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.8rem;">0</span>
+                </div>
+                <div id="availableDeliveries"></div>
+            </div>
+        </div>
+        
+        <!-- History Page -->
+        <div id="historyPage" class="page">
+            <div class="section-title">📋 Histórico de Hoje</div>
+            <div id="historyList"></div>
+        </div>
+        
+        <!-- Profile Page -->
+        <div id="profilePage" class="page">
+            <div class="profile-header">
+                <div class="profile-avatar">🛵</div>
+                <div class="profile-name" id="profileName">Entregador</div>
+                <div class="profile-rating">⭐ 4.9 (127 avaliações)</div>
+            </div>
+            
+            <div class="profile-stats">
+                <div class="stat-card">
+                    <div class="stat-value" id="weekDeliveries">0</div>
+                    <div class="stat-label">Esta semana</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value money" id="weekEarnings">R$ 0</div>
+                    <div class="stat-label">Ganhos semana</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="totalDeliveries">0</div>
+                    <div class="stat-label">Total</div>
+                </div>
+            </div>
+            
+            <div class="profile-menu-item">
+                <div class="profile-menu-icon">💰</div>
+                <div class="profile-menu-text">Extrato financeiro</div>
+                <div class="profile-menu-arrow">›</div>
+            </div>
+            <div class="profile-menu-item">
+                <div class="profile-menu-icon">📊</div>
+                <div class="profile-menu-text">Relatórios</div>
+                <div class="profile-menu-arrow">›</div>
+            </div>
+            <div class="profile-menu-item">
+                <div class="profile-menu-icon">⚙️</div>
+                <div class="profile-menu-text">Configurações</div>
+                <div class="profile-menu-arrow">›</div>
+            </div>
+            <div class="profile-menu-item" onclick="handleLogout()">
+                <div class="profile-menu-icon">🚪</div>
+                <div class="profile-menu-text" style="color: var(--danger);">Sair</div>
+                <div class="profile-menu-arrow">›</div>
+            </div>
+        </div>
+        
+        <!-- Navigation -->
+        <nav class="nav">
+            <div class="nav-item active" onclick="showPage('home')" style="position: relative;">
+                <span>🏠</span>
+                Início
+            </div>
+            <div class="nav-item" onclick="showPage('history')">
+                <span>📋</span>
+                Histórico
+            </div>
+            <div class="nav-item" onclick="showPage('profile')">
+                <span>👤</span>
+                Perfil
+            </div>
+        </nav>
+    </div>
+    
+    <!-- Confirm Accept Modal -->
+    <div class="modal" id="acceptModal">
+        <div class="modal-content">
+            <div class="modal-icon">📦</div>
+            <div class="modal-title">Aceitar Entrega?</div>
+            <div class="modal-text" id="acceptModalText">Burger House → Cliente</div>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeModal('acceptModal')">Cancelar</button>
+                <button class="btn btn-primary" onclick="confirmAccept()">Aceitar</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Confirm Pickup Modal -->
+    <div class="modal" id="pickupModal">
+        <div class="modal-content">
+            <div class="modal-icon">🏪</div>
+            <div class="modal-title">Retirou o pedido?</div>
+            <div class="modal-text">Confirme que pegou o pedido na loja</div>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeModal('pickupModal')">Ainda não</button>
+                <button class="btn btn-warning" onclick="confirmPickup()">Já peguei!</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Confirm Delivery Modal -->
+    <div class="modal" id="deliverModal">
+        <div class="modal-content">
+            <div class="modal-icon">✅</div>
+            <div class="modal-title">Entrega concluída?</div>
+            <div class="modal-text">Confirme que entregou ao cliente</div>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeModal('deliverModal')">Cancelar</button>
+                <button class="btn btn-success" onclick="confirmDelivery()">Entregue!</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    
+    <script>
+        // Firebase Config
+        const firebaseConfig = {
+            apiKey: "AIzaSyAnIJRcUxN-0swpVnonPbJjTSK87o4CQ_g",
+            authDomain: "pedrad-814d0.firebaseapp.com",
+            projectId: "pedrad-814d0",
+            storageBucket: "pedrad-814d0.firebasestorage.app",
+            messagingSenderId: "293587190550",
+            appId: "1:293587190550:web:80c9399f82847c80e20637"
+        };
+        
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+        
+        // State
+        let currentUser = null;
+        let isOnline = false;
+        let currentDelivery = null;
+        let availableOrders = [];
+        let completedToday = [];
+        let pendingAcceptOrder = null;
+        
+        const DELIVERY_FEE_DRIVER = 5.00; // Ganho do entregador por entrega
+        
+        // Auth
+        auth.onAuthStateChanged(async (user) => {
+            if (user) {
+                currentUser = user;
+                showMainApp();
+                await loadData();
+                setupRealtimeListeners();
+            } else {
+                showAuthPage();
+            }
+        });
+        
+        async function handleLogin(e) {
+            e.preventDefault();
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+            
+            try {
+                await auth.signInWithEmailAndPassword(email, password);
+            } catch (err) {
+                showToast('Erro: ' + err.message);
+            }
+        }
+        
+        function handleLogout() {
+            if (confirm('Deseja sair?')) {
+                auth.signOut();
+            }
+        }
+        
+        function showAuthPage() {
+            document.getElementById('authPage').style.display = 'flex';
+            document.getElementById('mainApp').style.display = 'none';
+        }
+        
+        function showMainApp() {
+            document.getElementById('authPage').style.display = 'none';
+            document.getElementById('mainApp').style.display = 'block';
+            document.getElementById('profileName').textContent = currentUser.displayName || currentUser.email.split('@')[0];
+        }
+        
+        // Data
+        async function loadData() {
+            await loadAvailableOrders();
+            await loadTodayHistory();
+            updateStats();
+        }
+        
+        async function loadAvailableOrders() {
+            try {
+                const snapshot = await db.collection('orders')
+                    .where('status', '==', 'ready')
+                    .get();
+                
+                availableOrders = snapshot.docs
+                    .map(doc => ({ id: doc.id, ...doc.data() }))
+                    .filter(o => !o.driverId); // Sem entregador atribuído
+                
+                renderAvailableOrders();
+            } catch (err) {
+                console.error('Error loading orders:', err);
+            }
+        }
+        
+        async function loadTodayHistory() {
+            try {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                
+                const snapshot = await db.collection('orders')
+                    .where('driverId', '==', currentUser.uid)
+                    .where('status', '==', 'delivered')
+                    .get();
+                
+                completedToday = snapshot.docs
+                    .map(doc => ({ id: doc.id, ...doc.data() }))
+                    .filter(o => {
+                        const date = o.deliveredAt?.toDate?.() || new Date(o.deliveredAt);
+                        return date >= today;
+                    })
+                    .sort((a, b) => {
+                        const dateA = a.deliveredAt?.toDate?.() || new Date(a.deliveredAt);
+                        const dateB = b.deliveredAt?.toDate?.() || new Date(b.deliveredAt);
+                        return dateB - dateA;
+                    });
+                
+                renderHistory();
+            } catch (err) {
+                console.error('Error loading history:', err);
+            }
+        }
+        
+        async function loadCurrentDelivery() {
+            try {
+                const snapshot = await db.collection('orders')
+                    .where('driverId', '==', currentUser.uid)
+                    .where('status', 'in', ['ready', 'delivering'])
+                    .limit(1)
+                    .get();
+                
+                if (!snapshot.empty) {
+                    currentDelivery = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
+                    renderCurrentDelivery();
+                } else {
+                    currentDelivery = null;
+                    document.getElementById('currentDeliverySection').style.display = 'none';
+                }
+            } catch (err) {
+                console.error('Error loading current delivery:', err);
+            }
+        }
+        
+        // Real-time
+        function setupRealtimeListeners() {
+            // Listen for available orders
+            db.collection('orders')
+                .where('status', '==', 'ready')
+                .onSnapshot(snapshot => {
+                    availableOrders = snapshot.docs
+                        .map(doc => ({ id: doc.id, ...doc.data() }))
+                        .filter(o => !o.driverId);
+                    renderAvailableOrders();
+                    
+                    if (availableOrders.length > 0 && isOnline) {
+                        playNotificationSound();
+                    }
+                });
+            
+            // Listen for my current delivery
+            db.collection('orders')
+                .where('driverId', '==', currentUser.uid)
+                .onSnapshot(snapshot => {
+                    const myOrders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    const active = myOrders.find(o => ['ready', 'delivering'].includes(o.status));
+                    
+                    if (active) {
+                        currentDelivery = active;
+                        renderCurrentDelivery();
+                    } else {
+                        currentDelivery = null;
+                        document.getElementById('currentDeliverySection').style.display = 'none';
+                    }
+                    
+                    loadTodayHistory();
+                    updateStats();
+                });
+        }
+        
+        function playNotificationSound() {
+            try {
+                const audio = new Audio('data:audio/wav;base64,UklGRl9vT19telefonkAAA==');
+                audio.play().catch(() => {});
+            } catch (e) {}
+        }
+        
+        // Render
+        function renderAvailableOrders() {
+            const container = document.getElementById('availableDeliveries');
+            document.getElementById('availableCount').textContent = availableOrders.length;
+            
+            if (!isOnline) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">😴</div>
+                        <div class="empty-state-title">Você está offline</div>
+                        <div class="empty-state-text">Ative o botão acima para receber entregas</div>
+                    </div>
+                `;
+                return;
+            }
+            
+            if (currentDelivery) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">🚀</div>
+                        <div class="empty-state-title">Você tem uma entrega ativa</div>
+                        <div class="empty-state-text">Finalize antes de aceitar outra</div>
+                    </div>
+                `;
+                return;
+            }
+            
+            if (availableOrders.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📭</div>
+                        <div class="empty-state-title">Nenhuma entrega disponível</div>
+                        <div class="empty-state-text">Aguarde novos pedidos...</div>
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = availableOrders.map(order => {
+                const waitTime = getWaitTime(order.createdAt);
+                const isUrgent = waitTime > 15;
+                
+                return `
+                    <div class="delivery-card ${isUrgent ? 'urgent' : ''}">
+                        <div class="delivery-header">
+                            <div class="delivery-store">
+                                <div class="delivery-store-icon">🏪</div>
+                                <div>
+                                    <div class="delivery-store-name">${order.storeName || 'Loja'}</div>
+                                    <div class="delivery-store-time">Aguardando há ${waitTime} min</div>
+                                </div>
+                            </div>
+                            <div class="delivery-value">
+                                <div class="delivery-fee">+ R$ ${DELIVERY_FEE_DRIVER.toFixed(2)}</div>
+                                <div class="delivery-distance">~${getRandomDistance()} km</div>
+                            </div>
+                        </div>
+                        <div class="delivery-body">
+                            <div class="delivery-address">
+                                <div class="address-icon">🏪</div>
+                                <div class="address-info">
+                                    <div class="address-label">RETIRAR EM</div>
+                                    <div class="address-text">${order.storeName || 'Loja'}</div>
+                                </div>
+                            </div>
+                            <div class="delivery-address">
+                                <div class="address-icon">📍</div>
+                                <div class="address-info">
+                                    <div class="address-label">ENTREGAR EM</div>
+                                    <div class="address-text">${order.address?.street}, ${order.address?.number} - ${order.address?.neighborhood}</div>
+                                </div>
+                            </div>
+                            <div class="delivery-actions">
+                                <button class="btn btn-primary" onclick="acceptOrder('${order.id}')">
+                                    ✓ Aceitar Entrega
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        function renderCurrentDelivery() {
+            if (!currentDelivery) return;
+            
+            document.getElementById('currentDeliverySection').style.display = 'block';
+            
+            const isPickup = currentDelivery.status === 'ready';
+            const statusClass = isPickup ? 'status-pickup' : 'status-delivering';
+            const statusText = isPickup ? '🏪 Retirar pedido' : '📍 Entregar';
+            
+            document.getElementById('currentDelivery').innerHTML = `
+                <div class="current-delivery-header">
+                    <div class="current-delivery-title">Pedido #${currentDelivery.id.slice(-6).toUpperCase()}</div>
+                    <span class="current-delivery-status ${statusClass}">${statusText}</span>
+                </div>
+                
+                <div class="route-line">
+                    <div class="route-dots">
+                        <div class="route-dot"></div>
+                        <div class="route-line-connector"></div>
+                        <div class="route-dot end"></div>
+                    </div>
+                    <div class="route-addresses">
+                        <div class="route-address">
+                            <div class="route-address-label">RETIRAR</div>
+                            <div class="route-address-text">🏪 ${currentDelivery.storeName || 'Loja'}</div>
+                        </div>
+                        <div class="route-address">
+                            <div class="route-address-label">ENTREGAR</div>
+                            <div class="route-address-text">📍 ${currentDelivery.address?.street}, ${currentDelivery.address?.number}</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div style="background: var(--bg-input); padding: 12px; border-radius: 10px; margin-bottom: 16px;">
+                    <div style="font-size: 0.85rem; color: var(--text-muted);">Cliente</div>
+                    <div style="font-weight: 600;">${currentDelivery.userName || 'Cliente'}</div>
+                </div>
+                
+                <div class="delivery-actions">
+                    ${isPickup 
+                        ? `<button class="btn btn-warning btn-block" onclick="openModal('pickupModal')">🏪 Retirei o Pedido</button>`
+                        : `<button class="btn btn-success btn-block" onclick="openModal('deliverModal')">✅ Entreguei</button>`
+                    }
+                </div>
+            `;
+        }
+        
+        function renderHistory() {
+            const container = document.getElementById('historyList');
+            
+            if (completedToday.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📋</div>
+                        <div class="empty-state-title">Nenhuma entrega hoje</div>
+                        <div class="empty-state-text">Suas entregas aparecerão aqui</div>
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = completedToday.map(order => {
+                const time = order.deliveredAt?.toDate?.() || new Date(order.deliveredAt);
+                const timeStr = time.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                
+                return `
+                    <div class="history-item">
+                        <div class="history-info">
+                            <div class="history-store">🏪 ${order.storeName || 'Loja'}</div>
+                            <div class="history-time">${timeStr} - ${order.address?.neighborhood || ''}</div>
+                        </div>
+                        <div class="history-value">+ R$ ${DELIVERY_FEE_DRIVER.toFixed(2)}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        function updateStats() {
+            const todayCount = completedToday.length;
+            const todayMoney = todayCount * DELIVERY_FEE_DRIVER;
+            const distance = todayCount * 3.5; // Estimativa
+            
+            document.getElementById('todayEarnings').textContent = `R$ ${todayMoney.toFixed(0)}`;
+            document.getElementById('todayDeliveries').textContent = todayCount;
+            document.getElementById('todayDistance').textContent = `${distance.toFixed(0)} km`;
+            
+            // Profile stats (simulados)
+            document.getElementById('weekDeliveries').textContent = todayCount * 5;
+            document.getElementById('weekEarnings').textContent = `R$ ${(todayMoney * 5).toFixed(0)}`;
+            document.getElementById('totalDeliveries').textContent = todayCount * 30;
+        }
+        
+        // Actions
+        function toggleOnline() {
+            isOnline = !isOnline;
+            
+            const toggle = document.getElementById('onlineToggle');
+            const text = document.getElementById('statusText');
+            
+            toggle.classList.toggle('active', isOnline);
+            text.textContent = isOnline ? 'Online' : 'Offline';
+            
+            renderAvailableOrders();
+            showToast(isOnline ? '🟢 Você está online!' : '🔴 Você está offline');
+        }
+        
+        function acceptOrder(orderId) {
+            pendingAcceptOrder = availableOrders.find(o => o.id === orderId);
+            if (!pendingAcceptOrder) return;
+            
+            document.getElementById('acceptModalText').textContent = 
+                `${pendingAcceptOrder.storeName} → ${pendingAcceptOrder.address?.neighborhood}`;
+            
+            openModal('acceptModal');
+        }
+        
+        async function confirmAccept() {
+            if (!pendingAcceptOrder) return;
+            
+            try {
+                await db.collection('orders').doc(pendingAcceptOrder.id).update({
+                    driverId: currentUser.uid,
+                    driverName: currentUser.displayName || currentUser.email.split('@')[0],
+                    acceptedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                
+                closeModal('acceptModal');
+                showToast('✅ Entrega aceita! Vá até a loja.');
+                pendingAcceptOrder = null;
+                
+            } catch (err) {
+                showToast('Erro ao aceitar entrega');
+            }
+        }
+        
+        async function confirmPickup() {
+            if (!currentDelivery) return;
+            
+            try {
+                const timeline = currentDelivery.timeline || [];
+                timeline.push({
+                    status: 'delivering',
+                    timestamp: new Date().toISOString(),
+                    message: 'Saiu para entrega'
+                });
+                
+                await db.collection('orders').doc(currentDelivery.id).update({
+                    status: 'delivering',
+                    timeline,
+                    pickedUpAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                
+                closeModal('pickupModal');
+                showToast('🛵 Pedido retirado! Siga para o cliente.');
+                
+            } catch (err) {
+                showToast('Erro ao confirmar retirada');
+            }
+        }
+        
+        async function confirmDelivery() {
+            if (!currentDelivery) return;
+            
+            try {
+                const timeline = currentDelivery.timeline || [];
+                timeline.push({
+                    status: 'delivered',
+                    timestamp: new Date().toISOString(),
+                    message: 'Pedido entregue'
+                });
+                
+                await db.collection('orders').doc(currentDelivery.id).update({
+                    status: 'delivered',
+                    timeline,
+                    deliveredAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                
+                closeModal('deliverModal');
+                showToast(`✅ Entrega concluída! +R$ ${DELIVERY_FEE_DRIVER.toFixed(2)}`);
+                
+            } catch (err) {
+                showToast('Erro ao confirmar entrega');
+            }
+        }
+        
+        // Navigation
+        function showPage(page) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            
+            document.getElementById(`${page}Page`).classList.add('active');
+            
+            const navIndex = { home: 0, history: 1, profile: 2 };
+            document.querySelectorAll('.nav-item')[navIndex[page]]?.classList.add('active');
+        }
+        
+        // Utils
+        function openModal(id) {
+            document.getElementById(id).classList.add('active');
+        }
+        
+        function closeModal(id) {
+            document.getElementById(id).classList.remove('active');
+        }
+        
+        function getWaitTime(createdAt) {
+            if (!createdAt) return 0;
+            const date = createdAt.toDate ? createdAt.toDate() : new Date(createdAt);
+            return Math.floor((Date.now() - date.getTime()) / 60000);
+        }
+        
+        function getRandomDistance() {
+            return (Math.random() * 4 + 1).toFixed(1);
+        }
+        
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+    </script>
+</body>
+</html>
