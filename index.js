@@ -9,7 +9,6 @@ const firebaseConfig = {
 };
 
 firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
 const db = firebase.firestore();
 
 // State
@@ -26,21 +25,20 @@ let platformConfig = { driverFee: 5, driverKmBonus: 1 };
 
 // ==================== AUTH ====================
 
-auth.onAuthStateChanged(async (user) => {
-    if (user) {
-        currentUser = user;
-        const driver = await loadDriverData(user.email);
+// Verificar sessão salva
+document.addEventListener('DOMContentLoaded', async () => {
+    const savedDriverId = localStorage.getItem('pedrad_driver_id');
+    if (savedDriverId) {
+        const driver = await loadDriverById(savedDriverId);
         if (driver && driver.status !== 'blocked') {
             driverData = driver;
+            currentUser = { email: driver.email };
             showMainApp();
             await loadAllData();
             setupRealtimeListeners();
-        } else if (driver?.status === 'blocked') {
-            showToast('Sua conta está bloqueada');
-            auth.signOut();
         } else {
-            showToast('Conta não autorizada');
-            auth.signOut();
+            localStorage.removeItem('pedrad_driver_id');
+            showAuthPage();
         }
     } else {
         showAuthPage();
@@ -49,11 +47,10 @@ auth.onAuthStateChanged(async (user) => {
 
 async function handleLogin(e) {
     e.preventDefault();
-    const email = document.getElementById('loginEmail').value.trim();
+    const email = document.getElementById('loginEmail').value.trim().toLowerCase();
     const password = document.getElementById('loginPassword').value;
 
     try {
-        // Verificar se entregador existe e senha confere
         const driver = await loadDriverData(email);
         if (!driver) {
             showToast('Entregador não cadastrado');
@@ -68,21 +65,15 @@ async function handleLogin(e) {
             return;
         }
 
-        // Tentar login no Firebase Auth
-        try {
-            await auth.signInWithEmailAndPassword(email, password);
-        } catch (authErr) {
-            // Se usuário não existe no Auth, criar
-            if (authErr.code === 'auth/user-not-found') {
-                await auth.createUserWithEmailAndPassword(email, password);
-            } else if (authErr.code === 'auth/wrong-password') {
-                // Senha diferente no Auth - atualizar
-                showToast('Erro de autenticação');
-                return;
-            } else {
-                throw authErr;
-            }
-        }
+        // Login OK - salvar sessão
+        driverData = driver;
+        currentUser = { email: driver.email };
+        localStorage.setItem('pedrad_driver_id', driver.id);
+        
+        showMainApp();
+        await loadAllData();
+        setupRealtimeListeners();
+        showToast('✅ Bem-vindo, ' + driver.name);
     } catch (err) {
         console.error('Login error:', err);
         showToast('Erro ao entrar');
@@ -105,12 +96,28 @@ async function loadDriverData(email) {
     }
 }
 
+async function loadDriverById(id) {
+    try {
+        const doc = await db.collection('drivers').doc(id).get();
+        if (doc.exists) {
+            return { id: doc.id, ...doc.data() };
+        }
+        return null;
+    } catch (err) {
+        console.error('Error loading driver:', err);
+        return null;
+    }
+}
+
 function handleLogout() {
     if (confirm('Deseja sair?')) {
         if (isOnline) {
             updateDriverOnlineStatus(false);
         }
-        auth.signOut();
+        localStorage.removeItem('pedrad_driver_id');
+        driverData = null;
+        currentUser = null;
+        showAuthPage();
     }
 }
 
