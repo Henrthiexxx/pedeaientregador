@@ -16,16 +16,18 @@ let currentUser = null;
 let driverData = null;
 let isOnline = false;
 let currentDelivery = null;
+let acceptedOrders = [];
 let availableOrders = [];
-let completedToday = [];
+let allHistory = [];
+let historyFilter = 'week';
 let deliveryFees = [];
 let pendingAcceptOrder = null;
 let capturedLocation = null;
 let platformConfig = { driverFee: 5, driverKmBonus: 1 };
+let onlineInterval = null;
 
 // ==================== AUTH ====================
 
-// Verificar sessão salva
 document.addEventListener('DOMContentLoaded', async () => {
     const savedDriverId = localStorage.getItem('pedrad_driver_id');
     if (savedDriverId) {
@@ -65,7 +67,6 @@ async function handleLogin(e) {
             return;
         }
 
-        // Login OK - salvar sessão
         driverData = driver;
         currentUser = { email: driver.email };
         localStorage.setItem('pedrad_driver_id', driver.id);
@@ -114,6 +115,9 @@ function handleLogout() {
         if (isOnline) {
             updateDriverOnlineStatus(false);
         }
+        if (onlineInterval) {
+            clearInterval(onlineInterval);
+        }
         localStorage.removeItem('pedrad_driver_id');
         driverData = null;
         currentUser = null;
@@ -138,23 +142,84 @@ function updateDriverUI() {
     const vehicleIcons = { moto: '🏍️', bicicleta: '🚲', carro: '🚗' };
     const vehicleIcon = vehicleIcons[driverData.vehicle] || '🛵';
 
-    // Header card
-    document.getElementById('driverAvatar').textContent = vehicleIcon;
+    // Avatar com foto ou emoji
+    const avatarElements = [
+        document.getElementById('driverAvatar'),
+        document.getElementById('profileAvatar')
+    ];
+    
+    avatarElements.forEach(el => {
+        if (driverData.photoUrl) {
+            el.style.backgroundImage = `url(${driverData.photoUrl})`;
+            el.style.backgroundSize = 'cover';
+            el.style.backgroundPosition = 'center';
+            el.textContent = '';
+        } else {
+            el.style.backgroundImage = 'none';
+            el.textContent = vehicleIcon;
+        }
+    });
+
+    // Rating do servidor
+    const rating = driverData.rating || 5.0;
+    document.getElementById('driverRating').textContent = rating.toFixed(1);
+    document.getElementById('profileRating').textContent = rating.toFixed(1);
+
     document.getElementById('driverName').textContent = driverData.name || 'Entregador';
     document.getElementById('driverVehicle').textContent = `${vehicleIcon} ${driverData.vehicle || 'Moto'} ${driverData.plate ? '• ' + driverData.plate : ''}`;
-    document.getElementById('driverRating').textContent = (driverData.rating || 5.0).toFixed(1);
 
-    // Profile
-    document.getElementById('profileAvatar').textContent = vehicleIcon;
     document.getElementById('profileName').textContent = driverData.name || 'Entregador';
     document.getElementById('profileEmail').textContent = driverData.email || '';
     document.getElementById('profilePhone').textContent = driverData.phone || '-';
     document.getElementById('profileVehicle').textContent = driverData.vehicle || '-';
     document.getElementById('profilePlate').textContent = driverData.plate || '-';
-    document.getElementById('profileRating').textContent = (driverData.rating || 5.0).toFixed(1);
+    document.getElementById('profileMaxOrders').textContent = driverData.maxSimultaneousOrders || 1;
 
-    // Earnings
     document.getElementById('pixKey').textContent = driverData.pix || 'Não cadastrado';
+}
+
+// ==================== PHOTO UPLOAD ====================
+
+function changeProfilePhoto() {
+    document.getElementById('photoInput').click();
+}
+
+async function handlePhotoUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+        showToast('❌ Selecione uma imagem');
+        return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+        showToast('❌ Imagem muito grande (max 5MB)');
+        return;
+    }
+
+    try {
+        showToast('📤 Enviando foto...');
+        
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            const base64 = e.target.result;
+            
+            await db.collection('drivers').doc(driverData.id).update({
+                photoUrl: base64,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+            driverData.photoUrl = base64;
+            updateDriverUI();
+            showToast('✅ Foto atualizada!');
+        };
+        
+        reader.readAsDataURL(file);
+    } catch (err) {
+        console.error('Error uploading photo:', err);
+        showToast('❌ Erro ao enviar foto');
+    }
 }
 
 // ==================== DATA LOADING ====================
@@ -164,8 +229,9 @@ async function loadAllData() {
         loadDeliveryFees(),
         loadPlatformConfig(),
         loadAvailableOrders(),
+        loadAcceptedOrders(),
         loadCurrentDelivery(),
-        loadTodayHistory()
+        loadAllHistory()
     ]);
     updateStats();
 }
@@ -206,13 +272,29 @@ async function loadAvailableOrders() {
     }
 }
 
+async function loadAcceptedOrders() {
+    if (!driverData) return;
+
+    try {
+        const snapshot = await db.collection('orders')
+            .where('driverId', '==', driverData.id)
+            .where('status', '==', 'ready')
+            .get();
+
+        acceptedOrders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        renderAcceptedOrders();
+    } catch (err) {
+        console.error('Error loading accepted orders:', err);
+    }
+}
+
 async function loadCurrentDelivery() {
     if (!driverData) return;
 
     try {
         const snapshot = await db.collection('orders')
             .where('driverId', '==', driverData.id)
-            .where('status', 'in', ['ready', 'delivering'])
+            .where('status', '==', 'delivering')
             .limit(1)
             .get();
 
@@ -228,24 +310,17 @@ async function loadCurrentDelivery() {
     }
 }
 
-async function loadTodayHistory() {
+async function loadAllHistory() {
     if (!driverData) return;
 
     try {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
         const snapshot = await db.collection('orders')
             .where('driverId', '==', driverData.id)
             .where('status', '==', 'delivered')
             .get();
 
-        completedToday = snapshot.docs
+        allHistory = snapshot.docs
             .map(doc => ({ id: doc.id, ...doc.data() }))
-            .filter(o => {
-                const date = o.deliveredAt?.toDate?.() || new Date(o.deliveredAt);
-                return date >= today;
-            })
             .sort((a, b) => {
                 const dateA = a.deliveredAt?.toDate?.() || new Date(a.deliveredAt);
                 const dateB = b.deliveredAt?.toDate?.() || new Date(b.deliveredAt);
@@ -278,36 +353,48 @@ function setupRealtimeListeners() {
             }
         });
 
-    // My current delivery
+    // My orders
     if (driverData) {
         db.collection('orders')
             .where('driverId', '==', driverData.id)
             .onSnapshot(snapshot => {
                 const myOrders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                const active = myOrders.find(o => ['ready', 'delivering'].includes(o.status));
-
-                if (active) {
-                    currentDelivery = active;
+                
+                // Aceitas mas não iniciadas
+                acceptedOrders = myOrders.filter(o => o.status === 'ready');
+                renderAcceptedOrders();
+                
+                // Em andamento
+                const delivering = myOrders.find(o => o.status === 'delivering');
+                if (delivering) {
+                    currentDelivery = delivering;
                     renderCurrentDelivery();
                 } else {
                     currentDelivery = null;
                     document.getElementById('currentDeliverySection').style.display = 'none';
-                    renderAvailableOrders();
                 }
 
-                loadTodayHistory();
+                loadAllHistory();
                 updateStats();
             });
 
-        // Driver data changes
+        // Driver data
         db.collection('drivers').doc(driverData.id).onSnapshot(doc => {
             if (doc.exists) {
+                const oldRating = driverData.rating;
                 driverData = { id: doc.id, ...doc.data() };
                 updateDriverUI();
 
                 if (driverData.status === 'blocked') {
                     showToast('Sua conta foi bloqueada');
-                    auth.signOut();
+                    handleLogout();
+                }
+
+                // Notificar mudança de rating
+                if (oldRating && driverData.rating && driverData.rating !== oldRating) {
+                    const diff = (driverData.rating - oldRating).toFixed(1);
+                    const emoji = diff > 0 ? '⭐' : '📉';
+                    showToast(`${emoji} Avaliação: ${driverData.rating.toFixed(1)}`);
                 }
             }
         });
@@ -344,12 +431,15 @@ function renderAvailableOrders() {
         return;
     }
 
-    if (currentDelivery) {
+    const maxOrders = driverData?.maxSimultaneousOrders || 1;
+    const myActiveCount = (acceptedOrders.length || 0) + (currentDelivery ? 1 : 0);
+
+    if (myActiveCount >= maxOrders) {
         container.innerHTML = `
             <div class="empty-state">
                 <div class="empty-state-icon">🚀</div>
-                <div class="empty-state-title">Você tem uma entrega ativa</div>
-                <div class="empty-state-text">Finalize antes de aceitar outra</div>
+                <div class="empty-state-title">Limite de entregas atingido</div>
+                <div class="empty-state-text">Finalize suas entregas antes de aceitar novas</div>
             </div>
         `;
         return;
@@ -370,7 +460,7 @@ function renderAvailableOrders() {
         const waitTime = getWaitTime(order.createdAt);
         const isUrgent = waitTime > 15;
         const fee = getDeliveryFee(order.address?.neighborhood);
-        const driverEarning = calculateDriverEarning(fee);
+        const driverEarning = calculateDriverEarning(fee, order.distance);
 
         return `
             <div class="delivery-card ${isUrgent ? 'urgent' : ''}">
@@ -384,7 +474,7 @@ function renderAvailableOrders() {
                     </div>
                     <div class="delivery-value">
                         <div class="delivery-fee">+ ${formatCurrency(driverEarning)}</div>
-                        <div class="delivery-distance">${order.address?.neighborhood || ''}</div>
+                        <div class="delivery-distance">${order.distance ? order.distance.toFixed(1) + ' km' : order.address?.neighborhood || ''}</div>
                     </div>
                 </div>
                 <div class="delivery-body">
@@ -413,25 +503,78 @@ function renderAvailableOrders() {
     }).join('');
 }
 
+function renderAcceptedOrders() {
+    const section = document.getElementById('acceptedSection');
+    const container = document.getElementById('acceptedOrders');
+    
+    if (acceptedOrders.length === 0) {
+        section.style.display = 'none';
+        return;
+    }
+
+    section.style.display = 'block';
+    document.getElementById('acceptedCount').textContent = acceptedOrders.length;
+
+    container.innerHTML = acceptedOrders.map(order => {
+        const fee = getDeliveryFee(order.address?.neighborhood);
+        const driverEarning = calculateDriverEarning(order.driverEarning || fee, order.distance);
+
+        return `
+            <div class="delivery-card" style="border-color: var(--warning);">
+                <div class="delivery-header">
+                    <div class="delivery-store">
+                        <div class="delivery-store-icon">🏪</div>
+                        <div>
+                            <div class="delivery-store-name">${order.storeName || 'Loja'}</div>
+                            <div class="delivery-store-time">Pedido aceito</div>
+                        </div>
+                    </div>
+                    <div class="delivery-value">
+                        <div class="delivery-fee">+ ${formatCurrency(driverEarning)}</div>
+                        <div class="delivery-distance">${order.distance ? order.distance.toFixed(1) + ' km' : order.address?.neighborhood || ''}</div>
+                    </div>
+                </div>
+                <div class="delivery-body">
+                    <div class="delivery-address">
+                        <div class="address-icon">🏪</div>
+                        <div class="address-info">
+                            <div class="address-label">RETIRAR EM</div>
+                            <div class="address-text">${order.storeName || 'Loja'}</div>
+                        </div>
+                    </div>
+                    <div class="delivery-address">
+                        <div class="address-icon">📍</div>
+                        <div class="address-info">
+                            <div class="address-label">ENTREGAR EM</div>
+                            <div class="address-text">${order.address?.street || ''}, ${order.address?.number || ''}</div>
+                        </div>
+                    </div>
+                    <div class="delivery-actions">
+                        <button class="btn btn-warning btn-block" onclick="startDelivery('${order.id}')">
+                            🏪 Iniciar Retirada
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
 function renderCurrentDelivery() {
     if (!currentDelivery) return;
 
     document.getElementById('currentDeliverySection').style.display = 'block';
 
-    const isPickup = currentDelivery.status === 'ready';
-    const statusClass = isPickup ? 'status-pickup' : 'status-delivering';
-    const statusText = isPickup ? '🏪 Retirar pedido' : '📍 Entregar';
     const fee = getDeliveryFee(currentDelivery.address?.neighborhood);
-    const driverEarning = calculateDriverEarning(fee);
+    const driverEarning = calculateDriverEarning(currentDelivery.driverEarning || fee, currentDelivery.distance);
 
-    // Buscar dados do cliente
     const clientName = currentDelivery.userName || 'Cliente';
     const clientPhone = currentDelivery.userPhone || '';
 
     document.getElementById('currentDelivery').innerHTML = `
         <div class="current-delivery-header">
             <div class="current-delivery-title">Pedido #${currentDelivery.id.slice(-6).toUpperCase()}</div>
-            <span class="current-delivery-status ${statusClass}">${statusText}</span>
+            <span class="current-delivery-status status-delivering">📍 Entregar</span>
         </div>
 
         <div class="route-line">
@@ -466,70 +609,142 @@ function renderCurrentDelivery() {
         </div>
 
         <div class="delivery-actions">
-            ${isPickup
-                ? `<button class="btn btn-warning btn-block" onclick="openModal('pickupModal')">🏪 Retirei o Pedido</button>`
-                : `<button class="btn btn-success btn-block" onclick="openDeliverModal()">✅ Finalizar Entrega</button>`
-            }
+            <button class="btn btn-success btn-block" onclick="openDeliverModal()">✅ Finalizar Entrega</button>
         </div>
     `;
 }
 
 function renderHistory() {
     const container = document.getElementById('historyList');
+    
+    const filtered = getFilteredHistory();
 
-    if (completedToday.length === 0) {
+    if (filtered.length === 0) {
         container.innerHTML = `
             <div class="empty-state">
                 <div class="empty-state-icon">📋</div>
-                <div class="empty-state-title">Nenhuma entrega hoje</div>
+                <div class="empty-state-title">Nenhuma entrega neste período</div>
                 <div class="empty-state-text">Suas entregas aparecerão aqui</div>
             </div>
         `;
+        document.getElementById('historyEarnings').textContent = formatCurrency(0);
         return;
     }
 
-    container.innerHTML = completedToday.map(order => {
+    let totalEarnings = 0;
+    
+    container.innerHTML = filtered.map(order => {
         const time = order.deliveredAt?.toDate?.() || new Date(order.deliveredAt);
         const timeStr = time.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        const dateStr = time.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
         const fee = getDeliveryFee(order.address?.neighborhood);
-        const driverEarning = calculateDriverEarning(order.driverEarning || fee);
+        const driverEarning = calculateDriverEarning(order.driverEarning || fee, order.distance);
+        totalEarnings += driverEarning;
 
         return `
             <div class="history-item">
                 <div class="history-info">
                     <div class="history-store">🏪 ${order.storeName || 'Loja'}</div>
-                    <div class="history-time">${timeStr} - ${order.address?.neighborhood || ''}</div>
+                    <div class="history-time">${dateStr} ${timeStr} - ${order.distance ? order.distance.toFixed(1) + ' km' : order.address?.neighborhood || ''}</div>
                 </div>
                 <div class="history-value">+ ${formatCurrency(driverEarning)}</div>
             </div>
         `;
     }).join('');
+
+    document.getElementById('historyEarnings').textContent = formatCurrency(totalEarnings);
+}
+
+function getFilteredHistory() {
+    const now = new Date();
+    
+    if (historyFilter === 'today') {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        return allHistory.filter(o => {
+            const date = o.deliveredAt?.toDate?.() || new Date(o.deliveredAt);
+            return date >= today;
+        });
+    }
+    
+    if (historyFilter === 'week') {
+        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        return allHistory.filter(o => {
+            const date = o.deliveredAt?.toDate?.() || new Date(o.deliveredAt);
+            return date >= weekAgo;
+        });
+    }
+    
+    if (historyFilter === 'month') {
+        const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        return allHistory.filter(o => {
+            const date = o.deliveredAt?.toDate?.() || new Date(o.deliveredAt);
+            return date >= monthAgo;
+        });
+    }
+    
+    return allHistory;
+}
+
+function setHistoryFilter(filter) {
+    historyFilter = filter;
+    
+    document.querySelectorAll('[id^="filter"]').forEach(btn => {
+        btn.classList.remove('btn-primary');
+        btn.classList.add('btn-secondary');
+    });
+    
+    document.getElementById(`filter${filter.charAt(0).toUpperCase() + filter.slice(1)}`).classList.add('btn-primary');
+    document.getElementById(`filter${filter.charAt(0).toUpperCase() + filter.slice(1)}`).classList.remove('btn-secondary');
+    
+    renderHistory();
 }
 
 function updateStats() {
-    const todayCount = completedToday.length;
-    let todayMoney = 0;
-
-    completedToday.forEach(order => {
-        const fee = order.driverEarning || getDeliveryFee(order.address?.neighborhood);
-        todayMoney += calculateDriverEarning(fee);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const todayOrders = allHistory.filter(o => {
+        const date = o.deliveredAt?.toDate?.() || new Date(o.deliveredAt);
+        return date >= today;
     });
 
-    const distance = todayCount * 3.5;
+    let todayMoney = 0;
+    let todayDistance = 0;
+
+    todayOrders.forEach(order => {
+        const fee = order.driverEarning || getDeliveryFee(order.address?.neighborhood);
+        todayMoney += calculateDriverEarning(fee, order.distance);
+        todayDistance += order.distance || 3.5; // fallback
+    });
 
     document.getElementById('todayEarnings').textContent = formatCurrency(todayMoney);
-    document.getElementById('todayDeliveries').textContent = todayCount;
-    document.getElementById('todayDistance').textContent = `${distance.toFixed(0)} km`;
+    document.getElementById('todayDeliveries').textContent = todayOrders.length;
+    document.getElementById('todayDistance').textContent = `${todayDistance.toFixed(1)} km`;
 
-    // Week stats (estimativas)
-    const weekMultiplier = 5;
-    document.getElementById('weekEarningsTotal').textContent = formatCurrency(todayMoney * weekMultiplier);
-    document.getElementById('weekDeliveriesCount').textContent = todayCount * weekMultiplier;
-    document.getElementById('weekDistanceTotal').textContent = `${(distance * weekMultiplier).toFixed(0)} km`;
-    document.getElementById('weekHoursTotal').textContent = `${todayCount * 2}h`;
+    // Week
+    const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const weekOrders = allHistory.filter(o => {
+        const date = o.deliveredAt?.toDate?.() || new Date(o.deliveredAt);
+        return date >= weekAgo;
+    });
 
-    // Profile total
-    document.getElementById('totalDeliveries').textContent = (driverData?.totalDeliveries || 0) + todayCount;
+    let weekMoney = 0;
+    let weekDistance = 0;
+
+    weekOrders.forEach(order => {
+        const fee = order.driverEarning || getDeliveryFee(order.address?.neighborhood);
+        weekMoney += calculateDriverEarning(fee, order.distance);
+        weekDistance += order.distance || 3.5;
+    });
+
+    document.getElementById('weekEarningsTotal').textContent = formatCurrency(weekMoney);
+    document.getElementById('weekDeliveriesCount').textContent = weekOrders.length;
+    document.getElementById('weekDistanceTotal').textContent = `${weekDistance.toFixed(1)} km`;
+    document.getElementById('weekHoursTotal').textContent = `${(weekOrders.length * 0.5).toFixed(0)}h`;
+
+    // Profile
+    document.getElementById('totalDeliveries').textContent = allHistory.length;
 }
 
 // ==================== ACTIONS ====================
@@ -544,8 +759,32 @@ function toggleOnline() {
     text.textContent = isOnline ? 'Online' : 'Offline';
 
     updateDriverOnlineStatus(isOnline);
+    
+    if (isOnline) {
+        startOnlineHeartbeat();
+    } else {
+        stopOnlineHeartbeat();
+    }
+    
     renderAvailableOrders();
     showToast(isOnline ? '🟢 Você está online!' : '🔴 Você está offline');
+}
+
+function startOnlineHeartbeat() {
+    if (onlineInterval) clearInterval(onlineInterval);
+    
+    onlineInterval = setInterval(() => {
+        if (isOnline && driverData) {
+            updateDriverOnlineStatus(true);
+        }
+    }, 60000); // 1 minuto
+}
+
+function stopOnlineHeartbeat() {
+    if (onlineInterval) {
+        clearInterval(onlineInterval);
+        onlineInterval = null;
+    }
 }
 
 async function updateDriverOnlineStatus(online) {
@@ -565,7 +804,7 @@ function acceptOrder(orderId) {
     if (!pendingAcceptOrder) return;
 
     const fee = getDeliveryFee(pendingAcceptOrder.address?.neighborhood);
-    const driverEarning = calculateDriverEarning(fee);
+    const driverEarning = calculateDriverEarning(fee, pendingAcceptOrder.distance);
 
     document.getElementById('acceptModalText').textContent =
         `${pendingAcceptOrder.storeName} → ${pendingAcceptOrder.address?.neighborhood}`;
@@ -575,6 +814,10 @@ function acceptOrder(orderId) {
             <span>Taxa de entrega:</span>
             <span>${formatCurrency(fee)}</span>
         </div>
+        ${pendingAcceptOrder.distance ? `<div style="display:flex;justify-content:space-between;margin-top:6px;">
+            <span>Distância:</span>
+            <span>${pendingAcceptOrder.distance.toFixed(1)} km</span>
+        </div>` : ''}
         <div style="display:flex;justify-content:space-between;margin-top:6px;font-weight:700;color:var(--primary);">
             <span>Seu ganho:</span>
             <span>${formatCurrency(driverEarning)}</span>
@@ -589,7 +832,7 @@ async function confirmAccept() {
 
     try {
         const fee = getDeliveryFee(pendingAcceptOrder.address?.neighborhood);
-        const driverEarning = calculateDriverEarning(fee);
+        const driverEarning = calculateDriverEarning(fee, pendingAcceptOrder.distance);
 
         const timeline = pendingAcceptOrder.timeline || [];
         timeline.push({
@@ -609,7 +852,7 @@ async function confirmAccept() {
         });
 
         closeModal('acceptModal');
-        showToast('✅ Entrega aceita! Vá até a loja.');
+        showToast('✅ Entrega aceita!');
         pendingAcceptOrder = null;
 
     } catch (err) {
@@ -618,55 +861,55 @@ async function confirmAccept() {
     }
 }
 
-async function confirmPickup() {
-    if (!currentDelivery) return;
+async function startDelivery(orderId) {
+    const order = acceptedOrders.find(o => o.id === orderId);
+    if (!order) return;
 
-    try {
-        const timeline = currentDelivery.timeline || [];
-        timeline.push({
-            status: 'delivering',
-            timestamp: new Date().toISOString(),
-            message: 'Pedido retirado, saiu para entrega'
-        });
+    if (confirm('Confirma que está retirando o pedido na loja?')) {
+        try {
+            const timeline = order.timeline || [];
+            timeline.push({
+                status: 'delivering',
+                timestamp: new Date().toISOString(),
+                message: 'Pedido retirado, saiu para entrega'
+            });
 
-        await db.collection('orders').doc(currentDelivery.id).update({
-            status: 'delivering',
-            timeline,
-            pickedUpAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
+            await db.collection('orders').doc(orderId).update({
+                status: 'delivering',
+                timeline,
+                pickedUpAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
 
-        closeModal('pickupModal');
-        showToast('🛵 Pedido retirado! Siga para o cliente.');
+            showToast('🛵 Pedido retirado! Siga para o cliente.');
 
-    } catch (err) {
-        console.error('Error confirming pickup:', err);
-        showToast('Erro ao confirmar retirada');
+        } catch (err) {
+            console.error('Error starting delivery:', err);
+            showToast('Erro ao iniciar entrega');
+        }
     }
 }
 
 function openDeliverModal() {
     capturedLocation = null;
-    document.getElementById('locationStatus').innerHTML = `
-        <span class="location-icon">📍</span>
-        <span class="location-text">Toque para capturar localização</span>
-    `;
-    document.getElementById('locationStatus').className = 'location-status';
-    document.getElementById('captureLocationBtn').disabled = false;
-    document.getElementById('captureLocationBtn').textContent = '📍 Capturar Localização';
     openModal('deliverModal');
+    
+    // Iniciar captura automática
+    setTimeout(() => {
+        captureLocationAuto();
+    }, 500);
 }
 
-async function captureLocation() {
+async function captureLocationAuto() {
     const statusEl = document.getElementById('locationStatus');
-    const btnEl = document.getElementById('captureLocationBtn');
+    const btnEl = document.getElementById('confirmDeliveryBtn');
 
     statusEl.innerHTML = `
         <span class="location-icon">⏳</span>
-        <span class="location-text">Obtendo localização...</span>
+        <span class="location-text">Capturando localização...</span>
     `;
     statusEl.className = 'location-status loading';
     btnEl.disabled = true;
-    btnEl.textContent = 'Aguarde...';
+    btnEl.textContent = '⏳ Aguarde GPS...';
 
     if (!navigator.geolocation) {
         statusEl.innerHTML = `
@@ -675,7 +918,7 @@ async function captureLocation() {
         `;
         statusEl.className = 'location-status error';
         btnEl.disabled = false;
-        btnEl.textContent = '📍 Tentar novamente';
+        btnEl.textContent = '✅ Confirmar mesmo assim';
         return;
     }
 
@@ -684,47 +927,34 @@ async function captureLocation() {
             const lat = position.coords.latitude;
             const lng = position.coords.longitude;
 
-            const mapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
-            const wazeUrl = `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`;
-
             capturedLocation = {
                 lat,
                 lng,
                 accuracy: position.coords.accuracy,
-                timestamp: new Date().toISOString(),
-                mapsUrl,
-                wazeUrl
+                timestamp: new Date().toISOString()
             };
 
             statusEl.innerHTML = `
-                <div style="margin-bottom:8px;font-weight:600;">📍 Localização capturada</div>
-
-                <iframe
-                    src="https://maps.google.com/maps?q=${lat},${lng}&z=16&output=embed"
-                    style="width:100%;height:160px;border-radius:12px;border:0;margin-bottom:10px;">
-                </iframe>
-
-                <div style="display:flex;gap:8px;">
-                    <a href="${mapsUrl}" target="_blank" class="btn btn-secondary btn-sm" style="flex:1;">🗺️ Google Maps</a>
-                    <a href="${wazeUrl}" target="_blank" class="btn btn-secondary btn-sm" style="flex:1;">🚗 Waze</a>
-                </div>
+                <span class="location-icon">✅</span>
+                <span class="location-text">Localização capturada!<br><small>Precisão: ${position.coords.accuracy.toFixed(0)}m</small></span>
             `;
             statusEl.className = 'location-status success';
-            btnEl.textContent = '✅ Localização OK';
+            btnEl.disabled = false;
+            btnEl.textContent = '✅ Confirmar Entrega';
         },
         (error) => {
-            let msg = 'Erro ao obter localização';
+            let msg = 'Erro ao capturar';
             if (error.code === error.PERMISSION_DENIED) msg = 'Permissão negada';
-            if (error.code === error.POSITION_UNAVAILABLE) msg = 'Localização indisponível';
+            if (error.code === error.POSITION_UNAVAILABLE) msg = 'GPS indisponível';
             if (error.code === error.TIMEOUT) msg = 'Tempo esgotado';
 
             statusEl.innerHTML = `
-                <span class="location-icon">❌</span>
+                <span class="location-icon">⚠️</span>
                 <span class="location-text">${msg}</span>
             `;
             statusEl.className = 'location-status error';
             btnEl.disabled = false;
-            btnEl.textContent = '📍 Tentar novamente';
+            btnEl.textContent = '✅ Confirmar mesmo assim';
         },
         {
             enableHighAccuracy: true,
@@ -734,15 +964,8 @@ async function captureLocation() {
     );
 }
 
-
 async function confirmDelivery() {
     if (!currentDelivery) return;
-
-    // Verificar se tem localização (opcional, mas recomendado)
-    if (!capturedLocation) {
-        const proceed = confirm('Localização não capturada. Deseja confirmar mesmo assim?');
-        if (!proceed) return;
-    }
 
     try {
         const timeline = currentDelivery.timeline || [];
@@ -756,7 +979,7 @@ async function confirmDelivery() {
         const updateData = {
             status: 'delivered',
             timeline,
-            deliveredAt: firebase.firestore.FieldValue.serverTimestamp()
+            deliveredAt: new Date().toISOString() // String ISO em vez de Timestamp
         };
 
         if (capturedLocation) {
@@ -765,7 +988,6 @@ async function confirmDelivery() {
 
         await db.collection('orders').doc(currentDelivery.id).update(updateData);
 
-        // Atualizar contador do entregador
         if (driverData) {
             await db.collection('drivers').doc(driverData.id).update({
                 totalDeliveries: firebase.firestore.FieldValue.increment(1),
@@ -780,7 +1002,7 @@ async function confirmDelivery() {
 
     } catch (err) {
         console.error('Error confirming delivery:', err);
-        showToast('Erro ao confirmar entrega');
+        showToast('Erro: ' + (err.message || 'Tente novamente'));
     }
 }
 
@@ -793,11 +1015,10 @@ function requestLocationPermission() {
     navigator.geolocation.getCurrentPosition(
         () => {
             showToast('✅ Permissão concedida!');
-            closeModal('locationPermissionModal');
         },
         (error) => {
             if (error.code === error.PERMISSION_DENIED) {
-                showToast('❌ Permissão negada. Ative nas configurações do navegador.');
+                showToast('❌ Permissão negada. Ative nas configurações.');
             } else {
                 showToast('❌ Erro ao obter permissão');
             }
@@ -843,9 +1064,10 @@ function getDeliveryFee(neighborhood) {
     return fee?.fee || platformConfig.driverFee || 5;
 }
 
-function calculateDriverEarning(deliveryFee) {
-    // Entregador recebe a taxa base + bônus por km (simplificado)
-    return platformConfig.driverFee || deliveryFee || 5;
+function calculateDriverEarning(baseFee, distance) {
+    // Fórmula: taxa base + bônus por km
+    const kmBonus = (distance || 0) * (platformConfig.driverKmBonus || 1);
+    return (baseFee || platformConfig.driverFee || 5) + kmBonus;
 }
 
 function formatCurrency(value) {
