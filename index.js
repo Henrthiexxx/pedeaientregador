@@ -25,6 +25,7 @@ let pendingAcceptOrder = null;
 let capturedLocation = null;
 let platformConfig = { driverFee: 5, driverKmBonus: 1 };
 let onlineInterval = null;
+let storesCache = {};
 
 // ==================== AUTH ====================
 
@@ -35,11 +36,26 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (driver && driver.status !== 'blocked') {
             driverData = driver;
             currentUser = { email: driver.email };
+            
+            // Restaurar estado online
+            const wasOnline = localStorage.getItem('pedrad_driver_online') === 'true';
+            if (wasOnline && driver.online) {
+                isOnline = true;
+                startOnlineHeartbeat();
+            }
+            
             showMainApp();
             await loadAllData();
             setupRealtimeListeners();
+            
+            // Atualizar UI do toggle
+            if (isOnline) {
+                document.getElementById('onlineToggle').classList.add('active');
+                document.getElementById('statusText').textContent = 'Online';
+            }
         } else {
             localStorage.removeItem('pedrad_driver_id');
+            localStorage.removeItem('pedrad_driver_online');
             showAuthPage();
         }
     } else {
@@ -119,6 +135,7 @@ function handleLogout() {
             clearInterval(onlineInterval);
         }
         localStorage.removeItem('pedrad_driver_id');
+        localStorage.removeItem('pedrad_driver_online');
         driverData = null;
         currentUser = null;
         showAuthPage();
@@ -333,6 +350,27 @@ async function loadAllHistory() {
     }
 }
 
+async function getStoreData(storeId) {
+    if (!storeId) return null;
+    
+    if (storesCache[storeId]) {
+        return storesCache[storeId];
+    }
+    
+    try {
+        const doc = await db.collection('stores').doc(storeId).get();
+        if (doc.exists) {
+            const data = doc.data();
+            storesCache[storeId] = data;
+            return data;
+        }
+    } catch (err) {
+        console.error('Error loading store:', err);
+    }
+    
+    return null;
+}
+
 // ==================== REAL-TIME ====================
 
 function setupRealtimeListeners() {
@@ -456,6 +494,7 @@ function renderAvailableOrders() {
         return;
     }
 
+    // Render placeholder primeiro
     container.innerHTML = availableOrders.map(order => {
         const waitTime = getWaitTime(order.createdAt);
         const isUrgent = waitTime > 15;
@@ -463,7 +502,7 @@ function renderAvailableOrders() {
         const driverEarning = calculateDriverEarning(fee, order.distance);
 
         return `
-            <div class="delivery-card ${isUrgent ? 'urgent' : ''}">
+            <div class="delivery-card ${isUrgent ? 'urgent' : ''}" id="order-${order.id}">
                 <div class="delivery-header">
                     <div class="delivery-store">
                         <div class="delivery-store-icon">🏪</div>
@@ -501,6 +540,22 @@ function renderAvailableOrders() {
             </div>
         `;
     }).join('');
+
+    // Carregar fotos das lojas
+    availableOrders.forEach(async order => {
+        if (order.storeId) {
+            const storeData = await getStoreData(order.storeId);
+            if (storeData && storeData.logoUrl) {
+                const iconEl = document.querySelector(`#order-${order.id} .delivery-store-icon`);
+                if (iconEl) {
+                    iconEl.style.backgroundImage = `url(${storeData.logoUrl})`;
+                    iconEl.style.backgroundSize = 'cover';
+                    iconEl.style.backgroundPosition = 'center';
+                    iconEl.textContent = '';
+                }
+            }
+        }
+    });
 }
 
 function renderAcceptedOrders() {
@@ -520,7 +575,7 @@ function renderAcceptedOrders() {
         const driverEarning = calculateDriverEarning(order.driverEarning || fee, order.distance);
 
         return `
-            <div class="delivery-card" style="border-color: var(--warning);">
+            <div class="delivery-card" id="accepted-${order.id}" style="border-color: var(--warning);">
                 <div class="delivery-header">
                     <div class="delivery-store">
                         <div class="delivery-store-icon">🏪</div>
@@ -558,6 +613,22 @@ function renderAcceptedOrders() {
             </div>
         `;
     }).join('');
+
+    // Carregar fotos
+    acceptedOrders.forEach(async order => {
+        if (order.storeId) {
+            const storeData = await getStoreData(order.storeId);
+            if (storeData && storeData.logoUrl) {
+                const iconEl = document.querySelector(`#accepted-${order.id} .delivery-store-icon`);
+                if (iconEl) {
+                    iconEl.style.backgroundImage = `url(${storeData.logoUrl})`;
+                    iconEl.style.backgroundSize = 'cover';
+                    iconEl.style.backgroundPosition = 'center';
+                    iconEl.textContent = '';
+                }
+            }
+        }
+    });
 }
 
 function renderCurrentDelivery() {
@@ -758,6 +829,9 @@ function toggleOnline() {
     toggle.classList.toggle('active', isOnline);
     text.textContent = isOnline ? 'Online' : 'Offline';
 
+    // Salvar estado
+    localStorage.setItem('pedrad_driver_online', isOnline);
+
     updateDriverOnlineStatus(isOnline);
     
     if (isOnline) {
@@ -829,6 +903,16 @@ function acceptOrder(orderId) {
 
 async function confirmAccept() {
     if (!pendingAcceptOrder || !driverData) return;
+
+    // Verificar limite
+    const maxOrders = driverData.maxSimultaneousOrders || 1;
+    const myActiveCount = acceptedOrders.length + (currentDelivery ? 1 : 0);
+    
+    if (myActiveCount >= maxOrders) {
+        closeModal('acceptModal');
+        showToast('❌ Você atingiu o limite de entregas simultâneas');
+        return;
+    }
 
     try {
         const fee = getDeliveryFee(pendingAcceptOrder.address?.neighborhood);
@@ -963,13 +1047,12 @@ async function captureLocationAuto() {
         }
     );
 }
+
 async function confirmDelivery() {
     if (!currentDelivery) return;
 
-    const delivery = { ...currentDelivery }; // snapshot local seguro
-
     try {
-        const timeline = delivery.timeline || [];
+        const timeline = currentDelivery.timeline || [];
         timeline.push({
             status: 'delivered',
             timestamp: new Date().toISOString(),
@@ -977,12 +1060,17 @@ async function confirmDelivery() {
             location: capturedLocation
         });
 
-        await db.collection('orders').doc(delivery.id).update({
+        const updateData = {
             status: 'delivered',
             timeline,
-            deliveredAt: new Date().toISOString(),
-            ...(capturedLocation && { deliveryLocation: capturedLocation })
-        });
+            deliveredAt: new Date().toISOString() // String ISO em vez de Timestamp
+        };
+
+        if (capturedLocation) {
+            updateData.deliveryLocation = capturedLocation;
+        }
+
+        await db.collection('orders').doc(currentDelivery.id).update(updateData);
 
         if (driverData) {
             await db.collection('drivers').doc(driverData.id).update({
@@ -991,17 +1079,16 @@ async function confirmDelivery() {
             });
         }
 
-        const earning = delivery.driverEarning || platformConfig.driverFee;
+        const earning = currentDelivery.driverEarning || platformConfig.driverFee;
         closeModal('deliverModal');
         showToast(`✅ Entrega concluída! +${formatCurrency(earning)}`);
         capturedLocation = null;
 
     } catch (err) {
         console.error('Error confirming delivery:', err);
-        showToast('Erro ao confirmar entrega');
+        showToast('Erro: ' + (err.message || 'Tente novamente'));
     }
 }
-
 
 function requestLocationPermission() {
     if (!navigator.geolocation) {
