@@ -963,12 +963,13 @@ async function captureLocationAuto() {
         }
     );
 }
-
 async function confirmDelivery() {
     if (!currentDelivery) return;
 
+    const delivery = { ...currentDelivery }; // snapshot local seguro
+
     try {
-        const timeline = currentDelivery.timeline || [];
+        const timeline = delivery.timeline || [];
         timeline.push({
             status: 'delivered',
             timestamp: new Date().toISOString(),
@@ -976,17 +977,12 @@ async function confirmDelivery() {
             location: capturedLocation
         });
 
-        const updateData = {
+        await db.collection('orders').doc(delivery.id).update({
             status: 'delivered',
             timeline,
-            deliveredAt: new Date().toISOString() // String ISO em vez de Timestamp
-        };
-
-        if (capturedLocation) {
-            updateData.deliveryLocation = capturedLocation;
-        }
-
-        await db.collection('orders').doc(currentDelivery.id).update(updateData);
+            deliveredAt: new Date().toISOString(),
+            ...(capturedLocation && { deliveryLocation: capturedLocation })
+        });
 
         if (driverData) {
             await db.collection('drivers').doc(driverData.id).update({
@@ -995,16 +991,17 @@ async function confirmDelivery() {
             });
         }
 
-        const earning = currentDelivery.driverEarning || platformConfig.driverFee;
+        const earning = delivery.driverEarning || platformConfig.driverFee;
         closeModal('deliverModal');
         showToast(`✅ Entrega concluída! +${formatCurrency(earning)}`);
         capturedLocation = null;
 
     } catch (err) {
         console.error('Error confirming delivery:', err);
-        showToast('Erro: ' + (err.message || 'Tente novamente'));
+        showToast('Erro ao confirmar entrega');
     }
 }
+
 
 function requestLocationPermission() {
     if (!navigator.geolocation) {
