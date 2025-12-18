@@ -49,7 +49,7 @@
         <div id="homePage" class="page active">
             <!-- Driver Info Card -->
             <div class="driver-card" id="driverCard">
-                <div class="driver-avatar" id="driverAvatar">🛵</div>
+                <div class="driver-avatar" id="driverAvatar" onclick="changeProfilePhoto()">🛵</div>
                 <div class="driver-info">
                     <div class="driver-name" id="driverName">Carregando...</div>
                     <div class="driver-vehicle" id="driverVehicle">-</div>
@@ -81,6 +81,15 @@
                 <div class="section-title">🚀 Entrega Atual</div>
                 <div class="current-delivery" id="currentDelivery"></div>
             </div>
+
+            <!-- Accepted Orders (não iniciadas) -->
+            <div id="acceptedSection" style="display: none;">
+                <div class="section-title">
+                    ⏳ Minhas Entregas Aceitas
+                    <span class="section-badge" id="acceptedCount">0</span>
+                </div>
+                <div id="acceptedOrders"></div>
+            </div>
             
             <!-- Available Deliveries -->
             <div id="availableSection">
@@ -94,7 +103,19 @@
         
         <!-- History Page -->
         <div id="historyPage" class="page">
-            <div class="section-title">📋 Histórico de Hoje</div>
+            <div class="section-title">📋 Histórico</div>
+            
+            <div style="display: flex; gap: 10px; margin-bottom: 16px;">
+                <button class="btn btn-sm" id="filterToday" onclick="setHistoryFilter('today')">Hoje</button>
+                <button class="btn btn-sm btn-primary" id="filterWeek" onclick="setHistoryFilter('week')">Semana</button>
+                <button class="btn btn-sm" id="filterMonth" onclick="setHistoryFilter('month')">Mês</button>
+            </div>
+
+            <div class="stat-card" style="margin-bottom: 16px;">
+                <div class="stat-value money" id="historyEarnings">R$ 0,00</div>
+                <div class="stat-label">Total do período</div>
+            </div>
+            
             <div id="historyList"></div>
         </div>
         
@@ -145,7 +166,7 @@
         <!-- Profile Page -->
         <div id="profilePage" class="page">
             <div class="profile-header">
-                <div class="profile-avatar" id="profileAvatar">🛵</div>
+                <div class="profile-avatar" id="profileAvatar" onclick="changeProfilePhoto()">🛵</div>
                 <div class="profile-name" id="profileName">Entregador</div>
                 <div class="profile-email" id="profileEmail">email@exemplo.com</div>
             </div>
@@ -177,6 +198,11 @@
                     <span class="profile-item-icon">🔢</span>
                     <span class="profile-item-label">Placa</span>
                     <span class="profile-item-value" id="profilePlate">-</span>
+                </div>
+                <div class="profile-item">
+                    <span class="profile-item-icon">📦</span>
+                    <span class="profile-item-label">Max. simultâneas</span>
+                    <span class="profile-item-value" id="profileMaxOrders">1</span>
                 </div>
             </div>
             
@@ -248,7 +274,7 @@
         </div>
     </div>
     
-    <!-- Delivery Complete Modal (com localização) -->
+    <!-- Delivery Complete Modal -->
     <div class="modal" id="deliverModal">
         <div class="modal-content">
             <div class="modal-icon">✅</div>
@@ -258,34 +284,20 @@
             <div class="location-box" id="locationBox">
                 <div class="location-status" id="locationStatus">
                     <span class="location-icon">📍</span>
-                    <span class="location-text">Toque para capturar localização</span>
+                    <span class="location-text">Capturando localização...</span>
                 </div>
-                <button class="btn btn-secondary btn-sm" onclick="captureLocation()" id="captureLocationBtn">
-                    📍 Capturar Localização
-                </button>
             </div>
             
             <div class="modal-actions">
                 <button class="btn btn-secondary" onclick="closeModal('deliverModal')">Cancelar</button>
-                <button class="btn btn-success" onclick="confirmDelivery()" id="confirmDeliveryBtn">
-                    ✅ Confirmar Entrega
+                <button class="btn btn-success" onclick="confirmDelivery()" id="confirmDeliveryBtn" disabled>
+                    ⏳ Aguarde GPS...
                 </button>
             </div>
         </div>
     </div>
     
-    <!-- Location Permission Modal -->
-    <div class="modal" id="locationPermissionModal">
-        <div class="modal-content">
-            <div class="modal-icon">📍</div>
-            <div class="modal-title">Permitir Localização</div>
-            <div class="modal-text">Para confirmar entregas, precisamos acessar sua localização. Isso ajuda a verificar que você está no local correto.</div>
-            <div class="modal-actions">
-                <button class="btn btn-secondary" onclick="closeModal('locationPermissionModal')">Agora não</button>
-                <button class="btn btn-primary" onclick="requestLocationPermission()">Permitir</button>
-            </div>
-        </div>
-    </div>
+    <input type="file" id="photoInput" accept="image/*" style="display: none;" onchange="handlePhotoUpload(event)">
 
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
