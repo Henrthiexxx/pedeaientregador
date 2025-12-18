@@ -232,6 +232,12 @@ body {
     align-items: center;
     justify-content: center;
     font-size: 1.5rem;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.driver-avatar:active {
+    transform: scale(0.95);
 }
 
 .driver-info { flex: 1; }
@@ -533,6 +539,12 @@ body {
     justify-content: center;
     font-size: 2rem;
     margin: 0 auto 12px;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.profile-avatar:active {
+    transform: scale(0.95);
 }
 
 .profile-name { font-size: 1.3rem; font-weight: 700; }
@@ -648,27 +660,27 @@ body {
     border-radius: 12px;
     padding: 16px;
     margin-bottom: 20px;
+    text-align: center;
 }
 
 .location-status {
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     gap: 8px;
-    margin-bottom: 12px;
     font-size: 0.9rem;
+    min-height: 80px;
 }
 
-.location-icon { font-size: 1.2rem; }
+.location-icon { font-size: 2rem; }
 
 .location-status.success { color: var(--primary); }
 .location-status.error { color: var(--danger); }
 .location-status.loading { color: var(--warning); }
 
-.location-coords {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    margin-top: 8px;
+.location-text {
+    font-size: 0.9rem;
 }
 
 /* Toast */
