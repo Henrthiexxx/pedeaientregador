@@ -681,40 +681,46 @@ async function captureLocation() {
 
     navigator.geolocation.getCurrentPosition(
         (position) => {
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+
+            const mapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+            const wazeUrl = `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`;
+
             capturedLocation = {
-                lat: position.coords.latitude,
-                lng: position.coords.longitude,
+                lat,
+                lng,
                 accuracy: position.coords.accuracy,
-                timestamp: new Date().toISOString()
+                timestamp: new Date().toISOString(),
+                mapsUrl,
+                wazeUrl
             };
 
             statusEl.innerHTML = `
-                <span class="location-icon">✅</span>
-                <span class="location-text">Localização capturada!</span>
-                <div class="location-coords">${capturedLocation.lat.toFixed(6)}, ${capturedLocation.lng.toFixed(6)}</div>
+                <div style="margin-bottom:8px;font-weight:600;">📍 Localização capturada</div>
+
+                <iframe
+                    src="https://maps.google.com/maps?q=${lat},${lng}&z=16&output=embed"
+                    style="width:100%;height:160px;border-radius:12px;border:0;margin-bottom:10px;">
+                </iframe>
+
+                <div style="display:flex;gap:8px;">
+                    <a href="${mapsUrl}" target="_blank" class="btn btn-secondary btn-sm" style="flex:1;">🗺️ Google Maps</a>
+                    <a href="${wazeUrl}" target="_blank" class="btn btn-secondary btn-sm" style="flex:1;">🚗 Waze</a>
+                </div>
             `;
             statusEl.className = 'location-status success';
             btnEl.textContent = '✅ Localização OK';
         },
         (error) => {
-            console.error('Geolocation error:', error);
-            let errorMsg = 'Erro ao obter localização';
-
-            switch (error.code) {
-                case error.PERMISSION_DENIED:
-                    errorMsg = 'Permissão negada';
-                    break;
-                case error.POSITION_UNAVAILABLE:
-                    errorMsg = 'Localização indisponível';
-                    break;
-                case error.TIMEOUT:
-                    errorMsg = 'Tempo esgotado';
-                    break;
-            }
+            let msg = 'Erro ao obter localização';
+            if (error.code === error.PERMISSION_DENIED) msg = 'Permissão negada';
+            if (error.code === error.POSITION_UNAVAILABLE) msg = 'Localização indisponível';
+            if (error.code === error.TIMEOUT) msg = 'Tempo esgotado';
 
             statusEl.innerHTML = `
                 <span class="location-icon">❌</span>
-                <span class="location-text">${errorMsg}</span>
+                <span class="location-text">${msg}</span>
             `;
             statusEl.className = 'location-status error';
             btnEl.disabled = false;
@@ -727,6 +733,7 @@ async function captureLocation() {
         }
     );
 }
+
 
 async function confirmDelivery() {
     if (!currentDelivery) return;
