@@ -232,12 +232,6 @@ body {
     align-items: center;
     justify-content: center;
     font-size: 1.5rem;
-    cursor: pointer;
-    transition: transform 0.2s;
-}
-
-.driver-avatar:active {
-    transform: scale(0.95);
 }
 
 .driver-info { flex: 1; }
@@ -539,12 +533,6 @@ body {
     justify-content: center;
     font-size: 2rem;
     margin: 0 auto 12px;
-    cursor: pointer;
-    transition: transform 0.2s;
-}
-
-.profile-avatar:active {
-    transform: scale(0.95);
 }
 
 .profile-name { font-size: 1.3rem; font-weight: 700; }
@@ -660,27 +648,27 @@ body {
     border-radius: 12px;
     padding: 16px;
     margin-bottom: 20px;
-    text-align: center;
 }
 
 .location-status {
     display: flex;
-    flex-direction: column;
     align-items: center;
     justify-content: center;
     gap: 8px;
+    margin-bottom: 12px;
     font-size: 0.9rem;
-    min-height: 80px;
 }
 
-.location-icon { font-size: 2rem; }
+.location-icon { font-size: 1.2rem; }
 
 .location-status.success { color: var(--primary); }
 .location-status.error { color: var(--danger); }
 .location-status.loading { color: var(--warning); }
 
-.location-text {
-    font-size: 0.9rem;
+.location-coords {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-top: 8px;
 }
 
 /* Toast */
@@ -704,3 +692,54 @@ body {
     transform: translateX(-50%) translateY(0);
     opacity: 1;
 }
+
+/* Mapa de navegação */
+.nav-map-popup {
+    position: fixed;
+    bottom: 90px;
+    left: 16px;
+    right: 16px;
+    height: 280px;
+    background: var(--bg-card);
+    border-radius: 16px;
+    border: 2px solid var(--primary);
+    z-index: 150;
+    overflow: hidden;
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.4);
+    display: none;
+}
+.nav-map-popup.active { display: block; }
+.nav-map-popup .map-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 14px;
+    background: var(--bg-input);
+    border-bottom: 1px solid var(--border);
+}
+.nav-map-popup .map-title { font-weight: 600; font-size: 0.9rem; }
+.nav-map-popup .map-close {
+    background: none;
+    border: none;
+    color: var(--text);
+    font-size: 1.3rem;
+    cursor: pointer;
+}
+.nav-map-popup #navMap { height: calc(100% - 44px); }
+.nav-map-btn {
+    position: fixed;
+    bottom: 160px;
+    right: 16px;
+    width: 56px;
+    height: 56px;
+    background: var(--primary);
+    border-radius: 50%;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    z-index: 140;
+    box-shadow: 0 4px 12px rgba(34,197,94,0.4);
+    display: none;
+    animation: pulse 2s infinite;
+}
+.nav-map-btn.active { display: flex; align-items: center; justify-content: center; }

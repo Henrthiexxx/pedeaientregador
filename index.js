@@ -27,6 +27,80 @@ let platformConfig = { driverFee: 5, driverKmBonus: 1 };
 let onlineInterval = null;
 let storesCache = {};
 
+// ==================== LOCATION TRACKING ====================
+let locationWatchId = null;
+let lastLocationUpdate = 0;
+const LOCATION_UPDATE_INTERVAL = 10000; // 10 segundos
+
+function startLocationTracking() {
+    if (!navigator.geolocation) {
+        console.log('Geolocation not supported');
+        return;
+    }
+
+    // Para qualquer tracking anterior
+    stopLocationTracking();
+
+    console.log('Starting location tracking...');
+
+    // Watch contínuo da posição
+    locationWatchId = navigator.geolocation.watchPosition(
+        (position) => {
+            const now = Date.now();
+            
+            // Só atualiza se passou o intervalo mínimo
+            if (now - lastLocationUpdate < LOCATION_UPDATE_INTERVAL) return;
+            lastLocationUpdate = now;
+
+            const location = {
+                lat: position.coords.latitude,
+                lng: position.coords.longitude,
+                accuracy: position.coords.accuracy,
+                updatedAt: new Date().toISOString()
+            };
+
+            console.log('Location update:', location);
+            updateDriverLocationInOrder(location);
+        },
+        (error) => {
+            console.error('Location error:', error.message);
+        },
+        {
+            enableHighAccuracy: true,
+            maximumAge: 5000,
+            timeout: 15000
+        }
+    );
+}
+
+function stopLocationTracking() {
+    if (locationWatchId !== null) {
+        navigator.geolocation.clearWatch(locationWatchId);
+        locationWatchId = null;
+        console.log('Location tracking stopped');
+    }
+}
+
+async function updateDriverLocationInOrder(location) {
+    if (!currentDelivery || !driverData) return;
+
+    try {
+        await db.collection('orders').doc(currentDelivery.id).update({
+            driverLocation: location,
+            driver: {
+                id: driverData.id,
+                name: driverData.name,
+                phone: driverData.phone || '',
+                vehicle: driverData.vehicle || 'Moto',
+                photoUrl: driverData.photoUrl || null
+            }
+        });
+        console.log('Driver location updated in order');
+    } catch (err) {
+        console.error('Error updating location:', err);
+    }
+}
+
 // ==================== AUTH ====================
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -134,6 +208,7 @@ function handleLogout() {
         if (onlineInterval) {
             clearInterval(onlineInterval);
         }
+        stopLocationTracking();
         localStorage.removeItem('pedrad_driver_id');
         localStorage.removeItem('pedrad_driver_online');
         driverData = null;
@@ -318,13 +393,17 @@ async function loadCurrentDelivery() {
         if (!snapshot.empty) {
             currentDelivery = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
             renderCurrentDelivery();
+            // Inicia tracking quando há entrega em andamento
+            startLocationTracking();
         } else {
             currentDelivery = null;
             document.getElementById('currentDeliverySection').style.display = 'none';
+            stopLocationTracking();
         }
     } catch (err) {
         console.error('Error loading current delivery:', err);
     }
+    showNavMapButton();
 }
 
 async function loadAllHistory() {
@@ -405,9 +484,19 @@ function setupRealtimeListeners() {
                 // Em andamento
                 const delivering = myOrders.find(o => o.status === 'delivering');
                 if (delivering) {
+                    const wasDelivering = !!currentDelivery;
                     currentDelivery = delivering;
                     renderCurrentDelivery();
+                    
+                    // Inicia tracking se começou uma entrega
+                    if (!wasDelivering) {
+                        startLocationTracking();
+                    }
                 } else {
+                    if (currentDelivery) {
+                        // Parou de entregar
+                        stopLocationTracking();
+                    }
                     currentDelivery = null;
                     document.getElementById('currentDeliverySection').style.display = 'none';
                 }
@@ -646,6 +735,11 @@ function renderCurrentDelivery() {
         <div class="current-delivery-header">
             <div class="current-delivery-title">Pedido #${currentDelivery.id.slice(-6).toUpperCase()}</div>
             <span class="current-delivery-status status-delivering">📍 Entregar</span>
+        </div>
+
+        <div class="tracking-indicator">
+            <span class="tracking-dot"></span>
+            <span>Compartilhando localização com cliente</span>
         </div>
 
         <div class="route-line">
@@ -965,6 +1059,7 @@ async function startDelivery(orderId) {
             });
 
             showToast('🛵 Pedido retirado! Siga para o cliente.');
+            openNavMap();
 
         } catch (err) {
             console.error('Error starting delivery:', err);
@@ -1051,6 +1146,9 @@ async function captureLocationAuto() {
 async function confirmDelivery() {
     if (!currentDelivery) return;
 
+    // Para o tracking de localização
+    stopLocationTracking();
+
     try {
         const timeline = currentDelivery.timeline || [];
         timeline.push({
@@ -1063,7 +1161,8 @@ async function confirmDelivery() {
         const updateData = {
             status: 'delivered',
             timeline,
-            deliveredAt: new Date().toISOString() // String ISO em vez de Timestamp
+            deliveredAt: new Date().toISOString(),
+            driverLocation: null // Limpa a localização ao finalizar
         };
 
         if (capturedLocation) {
@@ -1081,6 +1180,7 @@ async function confirmDelivery() {
 
         const earning = currentDelivery.driverEarning || platformConfig.driverFee;
         closeModal('deliverModal');
+        hideNavMapButton();
         showToast(`✅ Entrega concluída! +${formatCurrency(earning)}`);
         capturedLocation = null;
 
@@ -1166,4 +1266,41 @@ function showToast(message) {
     toast.textContent = message;
     toast.classList.add('show');
     setTimeout(() => toast.classList.remove('show'), 3000);
+}
+
+// ==================== NAV MAP ====================
+let navMap = null;
+
+function openNavMap() {
+    if (!currentDelivery?.address?.location) {
+        showToast('📍 Cliente não tem localização salva');
+        return;
+    }
+    document.getElementById('navMapPopup').classList.add('active');
+    document.getElementById('navMapBtn').classList.remove('active');
+    
+    setTimeout(() => {
+        const loc = currentDelivery.address.location;
+        if (navMap) navMap.remove();
+        navMap = L.map('navMap').setView([loc.lat, loc.lng], 16);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(navMap);
+        L.marker([loc.lat, loc.lng]).addTo(navMap)
+            .bindPopup(`📍 ${currentDelivery.address.street}, ${currentDelivery.address.number}`).openPopup();
+    }, 100);
+}
+
+function closeNavMap() {
+    document.getElementById('navMapPopup').classList.remove('active');
+    if (currentDelivery) document.getElementById('navMapBtn').classList.add('active');
+}
+
+function showNavMapButton() {
+    if (currentDelivery?.address?.location) {
+        document.getElementById('navMapBtn').classList.add('active');
+    }
+}
+
+function hideNavMapButton() {
+    document.getElementById('navMapBtn').classList.remove('active');
+    document.getElementById('navMapPopup').classList.remove('active');
 }

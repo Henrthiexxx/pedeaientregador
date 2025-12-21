@@ -6,6 +6,34 @@
     <title>Pedrad - Entregador</title>
     <meta name="theme-color" content="#22c55e">
     <link rel="stylesheet" href="index.css">
+    <style>
+        /* Tracking Indicator */
+        .tracking-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 14px;
+            background: rgba(34, 197, 94, 0.15);
+            border: 1px solid var(--success);
+            border-radius: 10px;
+            margin-bottom: 12px;
+            font-size: 0.85rem;
+            color: var(--success);
+        }
+        
+        .tracking-dot {
+            width: 10px;
+            height: 10px;
+            background: var(--success);
+            border-radius: 50%;
+            animation: trackingPulse 1.5s infinite;
+        }
+        
+        @keyframes trackingPulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.2); }
+        }
+    </style>
 </head>
 <body>
     <div class="toast" id="toast"></div>
@@ -302,5 +330,17 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     <script src="index.js"></script>
+<!-- Nav Map -->
+<div class="nav-map-popup" id="navMapPopup">
+    <div class="map-header">
+        <span class="map-title">📍 Destino do cliente</span>
+        <button class="map-close" onclick="closeNavMap()">×</button>
+    </div>
+    <div id="navMap"></div>
+</div>
+<button class="nav-map-btn" id="navMapBtn" onclick="openNavMap()">🗺️</button>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
 </body>
 </html>
