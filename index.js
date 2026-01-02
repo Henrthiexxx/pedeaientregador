@@ -196,7 +196,7 @@ async function loadDriverById(id) {
 }
 
 function handleLogout() {
-    if (confirm('Deseja sair?')) {
+    showConfirmModal('Deseja sair?', 'Você será desconectado do aplicativo.', () => {
         if (isOnline) {
             updateDriverOnlineStatus(false);
         }
@@ -209,7 +209,21 @@ function handleLogout() {
         driverData = null;
         currentUser = null;
         showAuthPage();
-    }
+    });
+}
+
+function showConfirmModal(title, text, onConfirm, confirmText = 'Confirmar', cancelText = 'Cancelar') {
+    document.getElementById('confirmModalTitle').textContent = title;
+    document.getElementById('confirmModalText').textContent = text;
+    document.getElementById('confirmModalBtn').textContent = confirmText;
+    document.getElementById('confirmModalCancel').textContent = cancelText;
+    
+    document.getElementById('confirmModalBtn').onclick = () => {
+        closeModal('confirmModal');
+        if (onConfirm) onConfirm();
+    };
+    
+    openModal('confirmModal');
 }
 
 function showAuthPage() {
@@ -1020,32 +1034,39 @@ async function confirmAccept() {
     }
 }
 
-async function startDelivery(orderId) {
+function startDelivery(orderId) {
     const order = acceptedOrders.find(o => o.id === orderId);
     if (!order) return;
 
-    if (confirm('Confirma que está retirando o pedido na loja?')) {
-        try {
-            const timeline = order.timeline || [];
-            timeline.push({
-                status: 'delivering',
-                timestamp: new Date().toISOString(),
-                message: 'Pedido retirado, saiu para entrega'
-            });
+    showConfirmModal(
+        'Retirar pedido?',
+        'Confirme que você está retirando o pedido na loja.',
+        () => executeStartDelivery(order),
+        'Confirmar retirada'
+    );
+}
 
-            await db.collection('orders').doc(orderId).update({
-                status: 'delivering',
-                timeline,
-                pickedUpAt: firebase.firestore.FieldValue.serverTimestamp()
-            });
+async function executeStartDelivery(order) {
+    try {
+        const timeline = order.timeline || [];
+        timeline.push({
+            status: 'delivering',
+            timestamp: new Date().toISOString(),
+            message: 'Pedido retirado, saiu para entrega'
+        });
 
-            showToast('Pedido retirado - Siga para o cliente');
-            openNavMap();
+        await db.collection('orders').doc(order.id).update({
+            status: 'delivering',
+            timeline,
+            pickedUpAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
 
-        } catch (err) {
-            console.error('Error starting delivery:', err);
-            showToast('Erro ao iniciar entrega');
-        }
+        showToast('Pedido retirado - Siga para o cliente');
+        openNavMap();
+
+    } catch (err) {
+        console.error('Error starting delivery:', err);
+        showToast('Erro ao iniciar entrega');
     }
 }
 
@@ -1463,10 +1484,15 @@ async function acceptTransfer(offerId) {
         return;
     }
 
-    if (!confirm(`Trocar entregas?\n\nRecebe: ${offer.storeName} → ${offer.orderNeighborhood}\nPassa: ${myOrder.storeName} → ${myOrder.address?.neighborhood}`)) {
-        return;
-    }
+    showConfirmModal(
+        'Trocar entregas?',
+        `Recebe: ${offer.storeName} → ${offer.orderNeighborhood}\nPassa: ${myOrder.storeName} → ${myOrder.address?.neighborhood}`,
+        () => executeTransfer(offer, myOrder),
+        'Trocar'
+    );
+}
 
+async function executeTransfer(offer, myOrder) {
     try {
         const batch = db.batch();
 
@@ -1483,7 +1509,7 @@ async function acceptTransfer(offerId) {
             })
         });
 
-        const myOrderRef = db.collection('orders').doc(myOrderId);
+        const myOrderRef = db.collection('orders').doc(myOrder.id);
         batch.update(myOrderRef, {
             driverId: offer.driverId,
             driverName: offer.driverName,
@@ -1495,7 +1521,7 @@ async function acceptTransfer(offerId) {
             })
         });
 
-        const offerRef = db.collection('transferOffers').doc(offerId);
+        const offerRef = db.collection('transferOffers').doc(offer.id);
         batch.delete(offerRef);
 
         await batch.commit();
