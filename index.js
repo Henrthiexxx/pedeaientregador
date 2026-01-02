@@ -115,6 +115,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             showMainApp();
             await loadAllData();
             setupRealtimeListeners();
+            initTransferSystem();
             
             if (isOnline) {
                 document.getElementById('onlineToggle').classList.add('active');
@@ -157,6 +158,7 @@ async function handleLogin(e) {
         showMainApp();
         await loadAllData();
         setupRealtimeListeners();
+        initTransferSystem();
         showToast('Bem-vindo, ' + driver.name);
     } catch (err) {
         console.error('Login error:', err);
@@ -673,14 +675,19 @@ function renderAcceptedOrders() {
                         </div>
                     </div>
                     <div class="delivery-actions">
-                        <button class="btn btn-warning btn-block" onclick="startDelivery('${order.id}')">
+                        <button class="btn btn-warning" onclick="startDelivery('${order.id}')" style="flex:1;">
                             Iniciar Retirada
+                        </button>
+                        <button class="btn btn-secondary" id="transfer-btn-${order.id}" onclick="openTransferModal('${order.id}')" style="flex:1;">
+                            Trocar
                         </button>
                     </div>
                 </div>
             </div>
         `;
     }).join('');
+
+    updateTransferButtons();
 
     acceptedOrders.forEach(async order => {
         if (order.storeId) {
@@ -1274,4 +1281,256 @@ function showNavMapButton() {
 function hideNavMapButton() {
     document.getElementById('navMapBtn').classList.remove('active');
     document.getElementById('navMapPopup').classList.remove('active');
+}
+
+// ==================== TRANSFER SYSTEM ====================
+
+let transferOffers = [];
+let myTransferOffer = null;
+
+function setupTransferListener() {
+    if (!driverData) return;
+
+    db.collection('transferOffers')
+        .where('status', '==', 'open')
+        .onSnapshot(snapshot => {
+            transferOffers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            renderTransferOffers();
+            checkMyOffer();
+        });
+}
+
+function checkMyOffer() {
+    myTransferOffer = transferOffers.find(o => o.driverId === driverData.id);
+    updateTransferButtons();
+}
+
+function updateTransferButtons() {
+    acceptedOrders.forEach(order => {
+        const btn = document.getElementById(`transfer-btn-${order.id}`);
+        if (btn) {
+            if (myTransferOffer && myTransferOffer.orderId === order.id) {
+                btn.textContent = 'Cancelar';
+                btn.onclick = () => cancelTransferOffer();
+            } else if (myTransferOffer) {
+                btn.style.display = 'none';
+            } else {
+                btn.textContent = 'Trocar';
+                btn.onclick = () => openTransferModal(order.id);
+                btn.style.display = '';
+            }
+        }
+    });
+}
+
+function openTransferModal(orderId) {
+    const order = acceptedOrders.find(o => o.id === orderId);
+    if (!order) return;
+
+    const container = document.getElementById('transferNeighborhoods');
+    container.innerHTML = deliveryFees.map(fee => `
+        <label class="transfer-neighborhood-option">
+            <input type="checkbox" value="${fee.name}" class="transfer-checkbox">
+            <span>${fee.name}</span>
+        </label>
+    `).join('');
+
+    document.getElementById('transferOrderInfo').textContent = 
+        `${order.storeName} → ${order.address?.neighborhood || 'N/A'}`;
+    document.getElementById('transferModal').dataset.orderId = orderId;
+    
+    openModal('transferModal');
+}
+
+async function createTransferOffer() {
+    const orderId = document.getElementById('transferModal').dataset.orderId;
+    const order = acceptedOrders.find(o => o.id === orderId);
+    if (!order) return;
+
+    const checkboxes = document.querySelectorAll('.transfer-checkbox:checked');
+    const wantNeighborhoods = Array.from(checkboxes).map(cb => cb.value);
+
+    if (wantNeighborhoods.length === 0) {
+        showToast('Selecione pelo menos um bairro');
+        return;
+    }
+
+    try {
+        const offer = {
+            orderId: order.id,
+            orderNeighborhood: order.address?.neighborhood || '',
+            storeName: order.storeName,
+            storeId: order.storeId,
+            driverId: driverData.id,
+            driverName: driverData.name,
+            wantNeighborhoods,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+            status: 'open'
+        };
+
+        await db.collection('transferOffers').add(offer);
+        
+        closeModal('transferModal');
+        showToast('Oferta de troca criada');
+    } catch (err) {
+        console.error('Error creating offer:', err);
+        showToast('Erro ao criar oferta');
+    }
+}
+
+async function cancelTransferOffer() {
+    if (!myTransferOffer) return;
+
+    try {
+        await db.collection('transferOffers').doc(myTransferOffer.id).delete();
+        showToast('Oferta cancelada');
+    } catch (err) {
+        console.error('Error canceling offer:', err);
+        showToast('Erro ao cancelar');
+    }
+}
+
+function renderTransferOffers() {
+    const section = document.getElementById('transferOffersSection');
+    const container = document.getElementById('transferOffersList');
+    
+    if (!section || !container) return;
+
+    const myNeighborhoods = acceptedOrders.map(o => o.address?.neighborhood).filter(Boolean);
+    
+    const compatibleOffers = transferOffers.filter(offer => {
+        if (offer.driverId === driverData.id) return false;
+        if (offer.status !== 'open') return false;
+        return offer.wantNeighborhoods.some(n => myNeighborhoods.includes(n));
+    });
+
+    if (compatibleOffers.length === 0) {
+        section.style.display = 'none';
+        return;
+    }
+
+    section.style.display = 'block';
+    document.getElementById('transferOffersCount').textContent = compatibleOffers.length;
+
+    container.innerHTML = compatibleOffers.map(offer => {
+        const myMatchingOrders = acceptedOrders.filter(o => 
+            offer.wantNeighborhoods.includes(o.address?.neighborhood)
+        );
+
+        return `
+            <div class="transfer-offer-card">
+                <div class="transfer-offer-header">
+                    <div class="transfer-offer-driver">${offer.driverName}</div>
+                    <div class="transfer-offer-time">${getOfferTimeAgo(offer.createdAt)}</div>
+                </div>
+                <div class="transfer-offer-details">
+                    <div class="transfer-offer-has">
+                        <span class="transfer-label">Oferece</span>
+                        <span class="transfer-value">${offer.storeName} → ${offer.orderNeighborhood}</span>
+                    </div>
+                    <div class="transfer-offer-wants">
+                        <span class="transfer-label">Aceita</span>
+                        <span class="transfer-value">${offer.wantNeighborhoods.join(', ')}</span>
+                    </div>
+                </div>
+                <div class="transfer-offer-match">
+                    <span class="transfer-label">Você pode trocar</span>
+                    <select class="input transfer-select" id="match-${offer.id}">
+                        ${myMatchingOrders.map(o => `
+                            <option value="${o.id}">${o.storeName} → ${o.address?.neighborhood}</option>
+                        `).join('')}
+                    </select>
+                </div>
+                <button class="btn btn-primary" onclick="acceptTransfer('${offer.id}')">
+                    Aceitar troca
+                </button>
+            </div>
+        `;
+    }).join('');
+}
+
+async function acceptTransfer(offerId) {
+    const offer = transferOffers.find(o => o.id === offerId);
+    if (!offer) return;
+
+    const selectEl = document.getElementById(`match-${offerId}`);
+    const myOrderId = selectEl?.value;
+    const myOrder = acceptedOrders.find(o => o.id === myOrderId);
+
+    if (!myOrder) {
+        showToast('Selecione um pedido para trocar');
+        return;
+    }
+
+    if (!confirm(`Trocar entregas?\n\nRecebe: ${offer.storeName} → ${offer.orderNeighborhood}\nPassa: ${myOrder.storeName} → ${myOrder.address?.neighborhood}`)) {
+        return;
+    }
+
+    try {
+        const batch = db.batch();
+
+        const hisOrderRef = db.collection('orders').doc(offer.orderId);
+        batch.update(hisOrderRef, {
+            driverId: driverData.id,
+            driverName: driverData.name,
+            driverPhone: driverData.phone,
+            driverVehicle: driverData.vehicle,
+            timeline: firebase.firestore.FieldValue.arrayUnion({
+                status: 'transferred',
+                timestamp: new Date().toISOString(),
+                message: `Troca: ${offer.driverName} → ${driverData.name}`
+            })
+        });
+
+        const myOrderRef = db.collection('orders').doc(myOrderId);
+        batch.update(myOrderRef, {
+            driverId: offer.driverId,
+            driverName: offer.driverName,
+            driverPhone: '',
+            timeline: firebase.firestore.FieldValue.arrayUnion({
+                status: 'transferred',
+                timestamp: new Date().toISOString(),
+                message: `Troca: ${driverData.name} → ${offer.driverName}`
+            })
+        });
+
+        const offerRef = db.collection('transferOffers').doc(offerId);
+        batch.delete(offerRef);
+
+        await batch.commit();
+
+        showToast('Troca realizada!');
+    } catch (err) {
+        console.error('Error accepting transfer:', err);
+        showToast('Erro ao realizar troca');
+    }
+}
+
+function getOfferTimeAgo(timestamp) {
+    if (!timestamp) return '';
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    const mins = Math.floor((Date.now() - date.getTime()) / 60000);
+    if (mins < 1) return 'agora';
+    if (mins < 60) return `${mins}min`;
+    return `${Math.floor(mins / 60)}h`;
+}
+
+async function cleanExpiredOffers() {
+    const now = new Date();
+    const expired = transferOffers.filter(o => {
+        const exp = o.expiresAt?.toDate ? o.expiresAt.toDate() : new Date(o.expiresAt);
+        return exp < now;
+    });
+
+    for (const offer of expired) {
+        try {
+            await db.collection('transferOffers').doc(offer.id).delete();
+        } catch (e) {}
+    }
+}
+
+function initTransferSystem() {
+    setupTransferListener();
+    setInterval(cleanExpiredOffers, 60000);
 }
