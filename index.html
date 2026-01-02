@@ -90,6 +90,15 @@
                 </div>
                 <div id="acceptedOrders"></div>
             </div>
+
+            <!-- Transfer Offers -->
+            <div id="transferOffersSection" style="display: none;">
+                <div class="section-title">
+                    Ofertas de Troca
+                    <span class="section-badge" id="transferOffersCount">0</span>
+                </div>
+                <div id="transferOffersList"></div>
+            </div>
             
             <!-- Available Deliveries -->
             <div id="availableSection">
@@ -292,6 +301,39 @@
                 <button class="btn btn-secondary" onclick="closeModal('deliverModal')">Cancelar</button>
                 <button class="btn btn-success" onclick="confirmDelivery()" id="confirmDeliveryBtn" disabled>
                     Aguarde GPS...
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Transfer Modal -->
+    <div class="modal" id="transferModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">Trocar Entrega</div>
+                <button class="modal-close" onclick="closeModal('transferModal')">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="transfer-current-order">
+                    <span class="transfer-label">Sua entrega atual</span>
+                    <span class="transfer-value" id="transferOrderInfo">-</span>
+                </div>
+                
+                <div class="transfer-select-section">
+                    <span class="transfer-label">Selecione os bairros que você aceita em troca</span>
+                    <div id="transferNeighborhoods" class="transfer-neighborhoods"></div>
+                </div>
+                
+                <p class="transfer-hint">
+                    Outros entregadores com entregas nesses bairros poderão propor a troca.
+                    A oferta expira em 30 minutos.
+                </p>
+                
+                <button class="btn btn-primary" onclick="createTransferOffer()">
+                    Criar oferta de troca
+                </button>
+                <button class="btn btn-secondary" onclick="closeModal('transferModal')" style="margin-top: 8px;">
+                    Cancelar
                 </button>
             </div>
         </div>
