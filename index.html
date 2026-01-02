@@ -177,7 +177,7 @@
             <div class="profile-header">
                 <div class="profile-avatar" id="profileAvatar" onclick="changeProfilePhoto()">—</div>
                 <div class="profile-name" id="profileName">Entregador</div>
-                <div class="profile-email" id="profileEmail">email@exemplo.com</div>
+                <div class="profile-email" id="profileEmail"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="dcb9b1bdb5b09cb9a4b9b1acb0b3f2bfb3b1">[email&#160;protected]</a></div>
             </div>
             
             <div class="profile-stats">
@@ -338,10 +338,22 @@
             </div>
         </div>
     </div>
+
+    <!-- Confirm Modal -->
+    <div class="modal" id="confirmModal">
+        <div class="modal-content">
+            <div class="modal-title" id="confirmModalTitle">Confirmar</div>
+            <div class="modal-text" id="confirmModalText">Deseja continuar?</div>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" id="confirmModalCancel" onclick="closeModal('confirmModal')">Cancelar</button>
+                <button class="btn btn-primary" id="confirmModalBtn">Confirmar</button>
+            </div>
+        </div>
+    </div>
     
     <input type="file" id="photoInput" accept="image/*" style="display: none;" onchange="handlePhotoUpload(event)">
 
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     <script src="index.js"></script>
 
@@ -353,8 +365,4 @@
         </div>
         <div id="navMap"></div>
     </div>
-    <button class="nav-map-btn" id="navMapBtn" onclick="openNavMap()">◎</button>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-</body>
-</html>
+    <button class="nav-map-btn"
