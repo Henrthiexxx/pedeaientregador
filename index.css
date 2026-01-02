@@ -939,7 +939,9 @@ body {
 .modal-text { 
     color: var(--text-muted); 
     margin-bottom: 20px; 
-    font-size: 0.9rem; 
+    font-size: 0.9rem;
+    white-space: pre-line;
+    line-height: 1.5;
 }
 
 .modal-info {
