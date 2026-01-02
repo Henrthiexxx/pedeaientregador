@@ -30,7 +30,7 @@ let storesCache = {};
 // ==================== LOCATION TRACKING ====================
 let locationWatchId = null;
 let lastLocationUpdate = 0;
-const LOCATION_UPDATE_INTERVAL = 10000; // 10 segundos
+const LOCATION_UPDATE_INTERVAL = 10000;
 
 function startLocationTracking() {
     if (!navigator.geolocation) {
@@ -38,17 +38,12 @@ function startLocationTracking() {
         return;
     }
 
-    // Para qualquer tracking anterior
     stopLocationTracking();
-
     console.log('Starting location tracking...');
 
-    // Watch contínuo da posição
     locationWatchId = navigator.geolocation.watchPosition(
         (position) => {
             const now = Date.now();
-            
-            // Só atualiza se passou o intervalo mínimo
             if (now - lastLocationUpdate < LOCATION_UPDATE_INTERVAL) return;
             lastLocationUpdate = now;
 
@@ -111,7 +106,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             driverData = driver;
             currentUser = { email: driver.email };
             
-            // Restaurar estado online
             const wasOnline = localStorage.getItem('pedrad_driver_online') === 'true';
             if (wasOnline && driver.online) {
                 isOnline = true;
@@ -122,7 +116,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             await loadAllData();
             setupRealtimeListeners();
             
-            // Atualizar UI do toggle
             if (isOnline) {
                 document.getElementById('onlineToggle').classList.add('active');
                 document.getElementById('statusText').textContent = 'Online';
@@ -164,7 +157,7 @@ async function handleLogin(e) {
         showMainApp();
         await loadAllData();
         setupRealtimeListeners();
-        showToast('✅ Bem-vindo, ' + driver.name);
+        showToast('Bem-vindo, ' + driver.name);
     } catch (err) {
         console.error('Login error:', err);
         showToast('Erro ao entrar');
@@ -231,10 +224,9 @@ function showMainApp() {
 function updateDriverUI() {
     if (!driverData) return;
 
-    const vehicleIcons = { moto: '🏍️', bicicleta: '🚲', carro: '🚗' };
-    const vehicleIcon = vehicleIcons[driverData.vehicle] || '🛵';
+    const vehicleNames = { moto: 'Moto', bicicleta: 'Bicicleta', carro: 'Carro' };
+    const vehicleName = vehicleNames[driverData.vehicle] || 'Moto';
 
-    // Avatar com foto ou emoji
     const avatarElements = [
         document.getElementById('driverAvatar'),
         document.getElementById('profileAvatar')
@@ -248,17 +240,16 @@ function updateDriverUI() {
             el.textContent = '';
         } else {
             el.style.backgroundImage = 'none';
-            el.textContent = vehicleIcon;
+            el.textContent = driverData.name ? driverData.name.charAt(0).toUpperCase() : '—';
         }
     });
 
-    // Rating do servidor
     const rating = driverData.rating || 5.0;
     document.getElementById('driverRating').textContent = rating.toFixed(1);
     document.getElementById('profileRating').textContent = rating.toFixed(1);
 
     document.getElementById('driverName').textContent = driverData.name || 'Entregador';
-    document.getElementById('driverVehicle').textContent = `${vehicleIcon} ${driverData.vehicle || 'Moto'} ${driverData.plate ? '• ' + driverData.plate : ''}`;
+    document.getElementById('driverVehicle').textContent = `${vehicleName} ${driverData.plate ? '• ' + driverData.plate : ''}`;
 
     document.getElementById('profileName').textContent = driverData.name || 'Entregador';
     document.getElementById('profileEmail').textContent = driverData.email || '';
@@ -281,17 +272,17 @@ async function handlePhotoUpload(event) {
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
-        showToast('❌ Selecione uma imagem');
+        showToast('Selecione uma imagem');
         return;
     }
 
     if (file.size > 5 * 1024 * 1024) {
-        showToast('❌ Imagem muito grande (max 5MB)');
+        showToast('Imagem muito grande (max 5MB)');
         return;
     }
 
     try {
-        showToast('📤 Enviando foto...');
+        showToast('Enviando foto...');
         
         const reader = new FileReader();
         reader.onload = async (e) => {
@@ -304,13 +295,13 @@ async function handlePhotoUpload(event) {
 
             driverData.photoUrl = base64;
             updateDriverUI();
-            showToast('✅ Foto atualizada!');
+            showToast('Foto atualizada');
         };
         
         reader.readAsDataURL(file);
     } catch (err) {
         console.error('Error uploading photo:', err);
-        showToast('❌ Erro ao enviar foto');
+        showToast('Erro ao enviar foto');
     }
 }
 
@@ -393,7 +384,6 @@ async function loadCurrentDelivery() {
         if (!snapshot.empty) {
             currentDelivery = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
             renderCurrentDelivery();
-            // Inicia tracking quando há entrega em andamento
             startLocationTracking();
         } else {
             currentDelivery = null;
@@ -453,7 +443,6 @@ async function getStoreData(storeId) {
 // ==================== REAL-TIME ====================
 
 function setupRealtimeListeners() {
-    // Available orders
     db.collection('orders')
         .where('status', 'in', ['preparing', 'ready'])
         .onSnapshot(snapshot => {
@@ -466,35 +455,30 @@ function setupRealtimeListeners() {
 
             if (availableOrders.length > prevCount && isOnline && !currentDelivery) {
                 playNotificationSound();
-                showToast('📦 Nova entrega disponível!');
+                showToast('Nova entrega disponível');
             }
         });
 
-    // My orders
     if (driverData) {
         db.collection('orders')
             .where('driverId', '==', driverData.id)
             .onSnapshot(snapshot => {
                 const myOrders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 
-                // Aceitas mas não iniciadas
                 acceptedOrders = myOrders.filter(o => o.status === 'ready');
                 renderAcceptedOrders();
                 
-                // Em andamento
                 const delivering = myOrders.find(o => o.status === 'delivering');
                 if (delivering) {
                     const wasDelivering = !!currentDelivery;
                     currentDelivery = delivering;
                     renderCurrentDelivery();
                     
-                    // Inicia tracking se começou uma entrega
                     if (!wasDelivering) {
                         startLocationTracking();
                     }
                 } else {
                     if (currentDelivery) {
-                        // Parou de entregar
                         stopLocationTracking();
                     }
                     currentDelivery = null;
@@ -505,7 +489,6 @@ function setupRealtimeListeners() {
                 updateStats();
             });
 
-        // Driver data
         db.collection('drivers').doc(driverData.id).onSnapshot(doc => {
             if (doc.exists) {
                 const oldRating = driverData.rating;
@@ -517,17 +500,15 @@ function setupRealtimeListeners() {
                     handleLogout();
                 }
 
-                // Notificar mudança de rating
                 if (oldRating && driverData.rating && driverData.rating !== oldRating) {
                     const diff = (driverData.rating - oldRating).toFixed(1);
-                    const emoji = diff > 0 ? '⭐' : '📉';
-                    showToast(`${emoji} Avaliação: ${driverData.rating.toFixed(1)}`);
+                    const symbol = diff > 0 ? '↑' : '↓';
+                    showToast(`${symbol} Avaliação: ${driverData.rating.toFixed(1)}`);
                 }
             }
         });
     }
 
-    // Delivery fees
     db.collection('deliveryFees').where('active', '==', true).onSnapshot(snapshot => {
         deliveryFees = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     });
@@ -550,7 +531,7 @@ function renderAvailableOrders() {
     if (!isOnline) {
         container.innerHTML = `
             <div class="empty-state">
-                <div class="empty-state-icon">😴</div>
+                <div class="empty-state-icon">○</div>
                 <div class="empty-state-title">Você está offline</div>
                 <div class="empty-state-text">Ative o botão acima para receber entregas</div>
             </div>
@@ -564,8 +545,8 @@ function renderAvailableOrders() {
     if (myActiveCount >= maxOrders) {
         container.innerHTML = `
             <div class="empty-state">
-                <div class="empty-state-icon">🚀</div>
-                <div class="empty-state-title">Limite de entregas atingido</div>
+                <div class="empty-state-icon">◎</div>
+                <div class="empty-state-title">Limite atingido</div>
                 <div class="empty-state-text">Finalize suas entregas antes de aceitar novas</div>
             </div>
         `;
@@ -575,15 +556,14 @@ function renderAvailableOrders() {
     if (availableOrders.length === 0) {
         container.innerHTML = `
             <div class="empty-state">
-                <div class="empty-state-icon">📭</div>
+                <div class="empty-state-icon">—</div>
                 <div class="empty-state-title">Nenhuma entrega disponível</div>
-                <div class="empty-state-text">Aguarde novos pedidos...</div>
+                <div class="empty-state-text">Aguarde novos pedidos</div>
             </div>
         `;
         return;
     }
 
-    // Render placeholder primeiro
     container.innerHTML = availableOrders.map(order => {
         const waitTime = getWaitTime(order.createdAt);
         const isUrgent = waitTime > 15;
@@ -594,7 +574,7 @@ function renderAvailableOrders() {
             <div class="delivery-card ${isUrgent ? 'urgent' : ''}" id="order-${order.id}">
                 <div class="delivery-header">
                     <div class="delivery-store">
-                        <div class="delivery-store-icon">🏪</div>
+                        <div class="delivery-store-icon">□</div>
                         <div>
                             <div class="delivery-store-name">${order.storeName || 'Loja'}</div>
                             <div class="delivery-store-time">Aguardando há ${waitTime} min</div>
@@ -607,22 +587,22 @@ function renderAvailableOrders() {
                 </div>
                 <div class="delivery-body">
                     <div class="delivery-address">
-                        <div class="address-icon">🏪</div>
+                        <div class="address-icon">□</div>
                         <div class="address-info">
-                            <div class="address-label">RETIRAR EM</div>
+                            <div class="address-label">Retirar em</div>
                             <div class="address-text">${order.storeName || 'Loja'}</div>
                         </div>
                     </div>
                     <div class="delivery-address">
-                        <div class="address-icon">📍</div>
+                        <div class="address-icon">◎</div>
                         <div class="address-info">
-                            <div class="address-label">ENTREGAR EM</div>
+                            <div class="address-label">Entregar em</div>
                             <div class="address-text">${order.address?.street || ''}, ${order.address?.number || ''} - ${order.address?.neighborhood || ''}</div>
                         </div>
                     </div>
                     <div class="delivery-actions">
                         <button class="btn btn-primary" onclick="acceptOrder('${order.id}')">
-                            ✓ Aceitar Entrega
+                            Aceitar Entrega
                         </button>
                     </div>
                 </div>
@@ -630,7 +610,6 @@ function renderAvailableOrders() {
         `;
     }).join('');
 
-    // Carregar fotos das lojas
     availableOrders.forEach(async order => {
         if (order.storeId) {
             const storeData = await getStoreData(order.storeId);
@@ -664,10 +643,10 @@ function renderAcceptedOrders() {
         const driverEarning = calculateDriverEarning(order.driverEarning || fee, order.distance);
 
         return `
-            <div class="delivery-card" id="accepted-${order.id}" style="border-color: var(--warning);">
+            <div class="delivery-card" id="accepted-${order.id}" style="border-color: var(--text-muted);">
                 <div class="delivery-header">
                     <div class="delivery-store">
-                        <div class="delivery-store-icon">🏪</div>
+                        <div class="delivery-store-icon">□</div>
                         <div>
                             <div class="delivery-store-name">${order.storeName || 'Loja'}</div>
                             <div class="delivery-store-time">Pedido aceito</div>
@@ -680,22 +659,22 @@ function renderAcceptedOrders() {
                 </div>
                 <div class="delivery-body">
                     <div class="delivery-address">
-                        <div class="address-icon">🏪</div>
+                        <div class="address-icon">□</div>
                         <div class="address-info">
-                            <div class="address-label">RETIRAR EM</div>
+                            <div class="address-label">Retirar em</div>
                             <div class="address-text">${order.storeName || 'Loja'}</div>
                         </div>
                     </div>
                     <div class="delivery-address">
-                        <div class="address-icon">📍</div>
+                        <div class="address-icon">◎</div>
                         <div class="address-info">
-                            <div class="address-label">ENTREGAR EM</div>
+                            <div class="address-label">Entregar em</div>
                             <div class="address-text">${order.address?.street || ''}, ${order.address?.number || ''}</div>
                         </div>
                     </div>
                     <div class="delivery-actions">
                         <button class="btn btn-warning btn-block" onclick="startDelivery('${order.id}')">
-                            🏪 Iniciar Retirada
+                            Iniciar Retirada
                         </button>
                     </div>
                 </div>
@@ -703,7 +682,6 @@ function renderAcceptedOrders() {
         `;
     }).join('');
 
-    // Carregar fotos
     acceptedOrders.forEach(async order => {
         if (order.storeId) {
             const storeData = await getStoreData(order.storeId);
@@ -734,7 +712,7 @@ function renderCurrentDelivery() {
     document.getElementById('currentDelivery').innerHTML = `
         <div class="current-delivery-header">
             <div class="current-delivery-title">Pedido #${currentDelivery.id.slice(-6).toUpperCase()}</div>
-            <span class="current-delivery-status status-delivering">📍 Entregar</span>
+            <span class="current-delivery-status status-delivering">Entregar</span>
         </div>
 
         <div class="tracking-indicator">
@@ -750,12 +728,12 @@ function renderCurrentDelivery() {
             </div>
             <div class="route-addresses">
                 <div class="route-address">
-                    <div class="route-address-label">RETIRAR</div>
-                    <div class="route-address-text">🏪 ${currentDelivery.storeName || 'Loja'}</div>
+                    <div class="route-address-label">Retirar</div>
+                    <div class="route-address-text">${currentDelivery.storeName || 'Loja'}</div>
                 </div>
                 <div class="route-address">
-                    <div class="route-address-label">ENTREGAR</div>
-                    <div class="route-address-text">📍 ${currentDelivery.address?.street || ''}, ${currentDelivery.address?.number || ''}</div>
+                    <div class="route-address-label">Entregar</div>
+                    <div class="route-address-text">${currentDelivery.address?.street || ''}, ${currentDelivery.address?.number || ''}</div>
                 </div>
             </div>
         </div>
@@ -763,18 +741,18 @@ function renderCurrentDelivery() {
         <div class="client-box">
             <div class="client-label">Cliente</div>
             <div class="client-name">${clientName}</div>
-            ${clientPhone ? `<div class="client-phone"><a href="tel:${clientPhone}" style="color: var(--info); text-decoration: none;">📞 ${clientPhone}</a></div>` : ''}
-            ${currentDelivery.address?.complement ? `<div style="font-size:0.85rem;color:var(--text-muted);margin-top:6px;">📝 ${currentDelivery.address.complement}</div>` : ''}
-            ${currentDelivery.address?.reference ? `<div style="font-size:0.85rem;color:var(--text-muted);">📍 Ref: ${currentDelivery.address.reference}</div>` : ''}
+            ${clientPhone ? `<div class="client-phone"><a href="tel:${clientPhone}" style="color: var(--primary); text-decoration: none;">${clientPhone}</a></div>` : ''}
+            ${currentDelivery.address?.complement ? `<div style="font-size:0.8rem;color:var(--text-muted);margin-top:8px;">${currentDelivery.address.complement}</div>` : ''}
+            ${currentDelivery.address?.reference ? `<div style="font-size:0.8rem;color:var(--text-muted);">Ref: ${currentDelivery.address.reference}</div>` : ''}
         </div>
 
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding:10px;background:var(--bg-input);border-radius:10px;">
-            <span style="color:var(--text-muted);">Seu ganho:</span>
-            <span style="font-weight:700;color:var(--primary);">${formatCurrency(driverEarning)}</span>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding:12px;background:var(--bg-input);border-radius:8px;border:1px solid var(--border);">
+            <span style="color:var(--text-muted);font-size:0.85rem;">Seu ganho</span>
+            <span style="font-weight:500;color:var(--primary);">${formatCurrency(driverEarning)}</span>
         </div>
 
         <div class="delivery-actions">
-            <button class="btn btn-success btn-block" onclick="openDeliverModal()">✅ Finalizar Entrega</button>
+            <button class="btn btn-success btn-block" onclick="openDeliverModal()">Finalizar Entrega</button>
         </div>
     `;
 }
@@ -787,7 +765,7 @@ function renderHistory() {
     if (filtered.length === 0) {
         container.innerHTML = `
             <div class="empty-state">
-                <div class="empty-state-icon">📋</div>
+                <div class="empty-state-icon">—</div>
                 <div class="empty-state-title">Nenhuma entrega neste período</div>
                 <div class="empty-state-text">Suas entregas aparecerão aqui</div>
             </div>
@@ -809,7 +787,7 @@ function renderHistory() {
         return `
             <div class="history-item">
                 <div class="history-info">
-                    <div class="history-store">🏪 ${order.storeName || 'Loja'}</div>
+                    <div class="history-store">${order.storeName || 'Loja'}</div>
                     <div class="history-time">${dateStr} ${timeStr} - ${order.distance ? order.distance.toFixed(1) + ' km' : order.address?.neighborhood || ''}</div>
                 </div>
                 <div class="history-value">+ ${formatCurrency(driverEarning)}</div>
@@ -880,14 +858,13 @@ function updateStats() {
     todayOrders.forEach(order => {
         const fee = order.driverEarning || getDeliveryFee(order.address?.neighborhood);
         todayMoney += calculateDriverEarning(fee, order.distance);
-        todayDistance += order.distance || 3.5; // fallback
+        todayDistance += order.distance || 3.5;
     });
 
     document.getElementById('todayEarnings').textContent = formatCurrency(todayMoney);
     document.getElementById('todayDeliveries').textContent = todayOrders.length;
     document.getElementById('todayDistance').textContent = `${todayDistance.toFixed(1)} km`;
 
-    // Week
     const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
     const weekOrders = allHistory.filter(o => {
         const date = o.deliveredAt?.toDate?.() || new Date(o.deliveredAt);
@@ -908,7 +885,6 @@ function updateStats() {
     document.getElementById('weekDistanceTotal').textContent = `${weekDistance.toFixed(1)} km`;
     document.getElementById('weekHoursTotal').textContent = `${(weekOrders.length * 0.5).toFixed(0)}h`;
 
-    // Profile
     document.getElementById('totalDeliveries').textContent = allHistory.length;
 }
 
@@ -923,7 +899,6 @@ function toggleOnline() {
     toggle.classList.toggle('active', isOnline);
     text.textContent = isOnline ? 'Online' : 'Offline';
 
-    // Salvar estado
     localStorage.setItem('pedrad_driver_online', isOnline);
 
     updateDriverOnlineStatus(isOnline);
@@ -935,7 +910,7 @@ function toggleOnline() {
     }
     
     renderAvailableOrders();
-    showToast(isOnline ? '🟢 Você está online!' : '🔴 Você está offline');
+    showToast(isOnline ? 'Você está online' : 'Você está offline');
 }
 
 function startOnlineHeartbeat() {
@@ -945,7 +920,7 @@ function startOnlineHeartbeat() {
         if (isOnline && driverData) {
             updateDriverOnlineStatus(true);
         }
-    }, 60000); // 1 minuto
+    }, 60000);
 }
 
 function stopOnlineHeartbeat() {
@@ -979,15 +954,15 @@ function acceptOrder(orderId) {
 
     document.getElementById('acceptModalInfo').innerHTML = `
         <div style="display:flex;justify-content:space-between;">
-            <span>Taxa de entrega:</span>
+            <span>Taxa de entrega</span>
             <span>${formatCurrency(fee)}</span>
         </div>
-        ${pendingAcceptOrder.distance ? `<div style="display:flex;justify-content:space-between;margin-top:6px;">
-            <span>Distância:</span>
+        ${pendingAcceptOrder.distance ? `<div style="display:flex;justify-content:space-between;margin-top:8px;">
+            <span>Distância</span>
             <span>${pendingAcceptOrder.distance.toFixed(1)} km</span>
         </div>` : ''}
-        <div style="display:flex;justify-content:space-between;margin-top:6px;font-weight:700;color:var(--primary);">
-            <span>Seu ganho:</span>
+        <div style="display:flex;justify-content:space-between;margin-top:8px;font-weight:500;color:var(--primary);">
+            <span>Seu ganho</span>
             <span>${formatCurrency(driverEarning)}</span>
         </div>
     `;
@@ -998,13 +973,12 @@ function acceptOrder(orderId) {
 async function confirmAccept() {
     if (!pendingAcceptOrder || !driverData) return;
 
-    // Verificar limite
     const maxOrders = driverData.maxSimultaneousOrders || 1;
     const myActiveCount = acceptedOrders.length + (currentDelivery ? 1 : 0);
     
     if (myActiveCount >= maxOrders) {
         closeModal('acceptModal');
-        showToast('❌ Você atingiu o limite de entregas simultâneas');
+        showToast('Limite de entregas simultâneas atingido');
         return;
     }
 
@@ -1030,7 +1004,7 @@ async function confirmAccept() {
         });
 
         closeModal('acceptModal');
-        showToast('✅ Entrega aceita!');
+        showToast('Entrega aceita');
         pendingAcceptOrder = null;
 
     } catch (err) {
@@ -1058,7 +1032,7 @@ async function startDelivery(orderId) {
                 pickedUpAt: firebase.firestore.FieldValue.serverTimestamp()
             });
 
-            showToast('🛵 Pedido retirado! Siga para o cliente.');
+            showToast('Pedido retirado - Siga para o cliente');
             openNavMap();
 
         } catch (err) {
@@ -1072,7 +1046,6 @@ function openDeliverModal() {
     capturedLocation = null;
     openModal('deliverModal');
     
-    // Iniciar captura automática
     setTimeout(() => {
         captureLocationAuto();
     }, 500);
@@ -1083,21 +1056,21 @@ async function captureLocationAuto() {
     const btnEl = document.getElementById('confirmDeliveryBtn');
 
     statusEl.innerHTML = `
-        <span class="location-icon">⏳</span>
+        <span class="location-icon">◌</span>
         <span class="location-text">Capturando localização...</span>
     `;
     statusEl.className = 'location-status loading';
     btnEl.disabled = true;
-    btnEl.textContent = '⏳ Aguarde GPS...';
+    btnEl.textContent = 'Aguarde GPS...';
 
     if (!navigator.geolocation) {
         statusEl.innerHTML = `
-            <span class="location-icon">❌</span>
+            <span class="location-icon">×</span>
             <span class="location-text">GPS não disponível</span>
         `;
         statusEl.className = 'location-status error';
         btnEl.disabled = false;
-        btnEl.textContent = '✅ Confirmar mesmo assim';
+        btnEl.textContent = 'Confirmar mesmo assim';
         return;
     }
 
@@ -1114,12 +1087,12 @@ async function captureLocationAuto() {
             };
 
             statusEl.innerHTML = `
-                <span class="location-icon">✅</span>
-                <span class="location-text">Localização capturada!<br><small>Precisão: ${position.coords.accuracy.toFixed(0)}m</small></span>
+                <span class="location-icon">✓</span>
+                <span class="location-text">Localização capturada<br><small>Precisão: ${position.coords.accuracy.toFixed(0)}m</small></span>
             `;
             statusEl.className = 'location-status success';
             btnEl.disabled = false;
-            btnEl.textContent = '✅ Confirmar Entrega';
+            btnEl.textContent = 'Confirmar Entrega';
         },
         (error) => {
             let msg = 'Erro ao capturar';
@@ -1128,12 +1101,12 @@ async function captureLocationAuto() {
             if (error.code === error.TIMEOUT) msg = 'Tempo esgotado';
 
             statusEl.innerHTML = `
-                <span class="location-icon">⚠️</span>
+                <span class="location-icon">!</span>
                 <span class="location-text">${msg}</span>
             `;
             statusEl.className = 'location-status error';
             btnEl.disabled = false;
-            btnEl.textContent = '✅ Confirmar mesmo assim';
+            btnEl.textContent = 'Confirmar mesmo assim';
         },
         {
             enableHighAccuracy: true,
@@ -1146,7 +1119,6 @@ async function captureLocationAuto() {
 async function confirmDelivery() {
     if (!currentDelivery) return;
 
-    // Para o tracking de localização
     stopLocationTracking();
 
     try {
@@ -1162,7 +1134,7 @@ async function confirmDelivery() {
             status: 'delivered',
             timeline,
             deliveredAt: new Date().toISOString(),
-            driverLocation: null // Limpa a localização ao finalizar
+            driverLocation: null
         };
 
         if (capturedLocation) {
@@ -1181,7 +1153,7 @@ async function confirmDelivery() {
         const earning = currentDelivery.driverEarning || platformConfig.driverFee;
         closeModal('deliverModal');
         hideNavMapButton();
-        showToast(`✅ Entrega concluída! +${formatCurrency(earning)}`);
+        showToast(`Entrega concluída +${formatCurrency(earning)}`);
         capturedLocation = null;
 
     } catch (err) {
@@ -1198,13 +1170,13 @@ function requestLocationPermission() {
 
     navigator.geolocation.getCurrentPosition(
         () => {
-            showToast('✅ Permissão concedida!');
+            showToast('Permissão concedida');
         },
         (error) => {
             if (error.code === error.PERMISSION_DENIED) {
-                showToast('❌ Permissão negada. Ative nas configurações.');
+                showToast('Permissão negada - Ative nas configurações do dispositivo');
             } else {
-                showToast('❌ Erro ao obter permissão');
+                showToast('Erro ao obter permissão');
             }
         }
     );
@@ -1249,7 +1221,6 @@ function getDeliveryFee(neighborhood) {
 }
 
 function calculateDriverEarning(baseFee, distance) {
-    // Fórmula: taxa base + bônus por km
     const kmBonus = (distance || 0) * (platformConfig.driverKmBonus || 1);
     return (baseFee || platformConfig.driverFee || 5) + kmBonus;
 }
@@ -1273,7 +1244,7 @@ let navMap = null;
 
 function openNavMap() {
     if (!currentDelivery?.address?.location) {
-        showToast('📍 Cliente não tem localização salva');
+        showToast('Cliente não tem localização salva');
         return;
     }
     document.getElementById('navMapPopup').classList.add('active');
@@ -1285,7 +1256,7 @@ function openNavMap() {
         navMap = L.map('navMap').setView([loc.lat, loc.lng], 16);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(navMap);
         L.marker([loc.lat, loc.lng]).addTo(navMap)
-            .bindPopup(`📍 ${currentDelivery.address.street}, ${currentDelivery.address.number}`).openPopup();
+            .bindPopup(`${currentDelivery.address.street}, ${currentDelivery.address.number}`).openPopup();
     }, 100);
 }
 
