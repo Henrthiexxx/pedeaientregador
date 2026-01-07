@@ -115,6 +115,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             showMainApp();
             await loadAllData();
             setupRealtimeListeners();
+            setupDriverPushNotifications();
             initTransferSystem();
             
             if (isOnline) {
