@@ -65,7 +65,7 @@ const FCMModule = {
         
         try {
             // Salva/atualiza token no documento do usuário
-            const collection = userType === 'store' ? 'stores' : 'users';
+            const collection = userType === 'store' ? 'stores' : (userType === 'driver' ? 'drivers' : 'users');
             const field = 'fcmTokens';
             
             // Usa arrayUnion para não duplicar tokens
