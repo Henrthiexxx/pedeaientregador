@@ -60,28 +60,33 @@ const FCMModule = {
         }
     },
     
+    getCollection(userType) {
+        if (userType === 'store') return 'stores';
+        if (userType === 'driver') return 'drivers';
+        return 'users';
+    },
+    
     async saveTokenToFirestore(userId, userType = 'customer') {
         if (!this.token || !userId) return;
         
+        const collection = this.getCollection(userType);
+        
         try {
-            // Salva/atualiza token no documento do usuário
-            const collection = userType === 'store' ? 'stores' : (userType === 'driver' ? 'drivers' : 'users');
-            const field = 'fcmTokens';
-            
             // Usa arrayUnion para não duplicar tokens
             await db.collection(collection).doc(userId).update({
-                [field]: firebase.firestore.FieldValue.arrayUnion(this.token),
+                fcmTokens: firebase.firestore.FieldValue.arrayUnion(this.token),
                 lastTokenUpdate: firebase.firestore.FieldValue.serverTimestamp()
             });
             
-            console.log('✅ Token salvo no Firestore');
+            console.log('✅ Token salvo no Firestore:', collection);
         } catch (err) {
             // Se doc não existe, cria
             if (err.code === 'not-found') {
-                await db.collection(userType === 'store' ? 'stores' : 'users').doc(userId).set({
+                await db.collection(collection).doc(userId).set({
                     fcmTokens: [this.token],
                     lastTokenUpdate: firebase.firestore.FieldValue.serverTimestamp()
                 }, { merge: true });
+                console.log('✅ Token criado no Firestore:', collection);
             } else {
                 console.error('Erro ao salvar token:', err);
             }
@@ -91,11 +96,13 @@ const FCMModule = {
     async removeToken(userId, userType = 'customer') {
         if (!this.token || !userId) return;
         
+        const collection = this.getCollection(userType);
+        
         try {
-            const collection = userType === 'store' ? 'stores' : 'users';
             await db.collection(collection).doc(userId).update({
                 fcmTokens: firebase.firestore.FieldValue.arrayRemove(this.token)
             });
+            console.log('✅ Token removido do Firestore');
         } catch (err) {
             console.error('Erro ao remover token:', err);
         }
@@ -115,7 +122,7 @@ const FCMModule = {
             navigator.vibrate([200, 100, 200]);
         }
         
-        // Som (opcional)
+        // Som
         try {
             const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2teleVVcjrqxlYRwZoOdscCwln10dY2ntbG0sKKYiIJ6dnJ0dnh8gIWJj5SVmJqcoaGhpKSkoqKfn5yZl5KQjYuKiYmJiYmJiYmJiYmJ');
             audio.play().catch(() => {});
@@ -135,7 +142,7 @@ const FCMModule = {
 
 // ==================== INTEGRAÇÃO ====================
 
-// Adicione isso após o login bem-sucedido no app cliente:
+// App Cliente - após login
 async function setupPushNotifications() {
     const initialized = await FCMModule.init();
     if (!initialized) return;
@@ -146,7 +153,7 @@ async function setupPushNotifications() {
     }
 }
 
-// Adicione isso após o login no painel da loja:
+// Painel da Loja - após carregar loja
 async function setupStorePushNotifications(storeId) {
     const initialized = await FCMModule.init();
     if (!initialized) return;
@@ -157,10 +164,7 @@ async function setupStorePushNotifications(storeId) {
     }
 }
 
-// Chame no logout para limpar token:
-async function cleanupPushNotifications(userId, userType) {
-    await FCMModule.removeToken(userId, userType);
-}
+// App Entregador - após login
 async function setupDriverPushNotifications() {
     const initialized = await FCMModule.init();
     if (!initialized) return;
@@ -169,4 +173,9 @@ async function setupDriverPushNotifications() {
     if (token && driverData) {
         await FCMModule.saveTokenToFirestore(driverData.id, 'driver');
     }
+}
+
+// Logout - limpar token
+async function cleanupPushNotifications(userId, userType) {
+    await FCMModule.removeToken(userId, userType);
 }
