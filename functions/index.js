@@ -226,3 +226,26 @@ function formatCurrency(value) {
         currency: 'BRL' 
     }).format(value || 0);
 }
+exports.onDriverAssignedReady = functions.firestore
+  .document('orders/{orderId}')
+  .onUpdate(async (change, context) => {
+    const b = change.before.data();
+    const a = change.after.data();
+
+    const driverJustAssigned = !b.driverId && !!a.driverId;
+    if (!driverJustAssigned) return null;
+    if (a.status !== 'ready') return null;
+
+    const driverDoc = await db.collection('drivers').doc(a.driverId).get();
+    const tokens = driverDoc.data()?.fcmTokens || [];
+    if (!tokens.length) return null;
+
+    return messaging.sendEachForMulticast({
+      tokens,
+      data: { type: 'order_ready', orderId: context.params.orderId },
+      notification: {
+        title: '📦 Pedido Pronto!',
+        body: `#${context.params.orderId.slice(-6).toUpperCase()} pronto para retirada`
+      }
+    });
+  });
