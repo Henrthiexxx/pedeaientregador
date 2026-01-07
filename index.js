@@ -160,6 +160,7 @@ async function handleLogin(e) {
         setupRealtimeListeners();
         initTransferSystem();
         showToast('Bem-vindo, ' + driver.name);
+        setupDriverPushNotifications();
     } catch (err) {
         console.error('Login error:', err);
         showToast('Erro ao entrar');
