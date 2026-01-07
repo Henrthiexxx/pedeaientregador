@@ -161,3 +161,12 @@ async function setupStorePushNotifications(storeId) {
 async function cleanupPushNotifications(userId, userType) {
     await FCMModule.removeToken(userId, userType);
 }
+async function setupDriverPushNotifications() {
+    const initialized = await FCMModule.init();
+    if (!initialized) return;
+    
+    const token = await FCMModule.requestPermissionAndGetToken();
+    if (token && driverData) {
+        await FCMModule.saveTokenToFirestore(driverData.id, 'driver');
+    }
+}
