@@ -48,7 +48,7 @@ const FCMModule = {
             // Obtém token FCM
             // IMPORTANTE: Substitua pela sua VAPID key do Firebase Console
             // Firebase Console > Project Settings > Cloud Messaging > Web Push certificates
-            const vapidKey = 'SUA_VAPID_KEY_AQUI';
+            const vapidKey = 'BEyLjUm82KxRNv4fCZOWxBln45CjHSleYDOgBCDffXVPP45SsFmZHxJxP0A0hJ0c8uZWdWU8u_YLIacXXYWtCV4';
             
             this.token = await this.messaging.getToken({ vapidKey });
             console.log('🔑 FCM Token:', this.token);
