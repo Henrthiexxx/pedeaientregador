@@ -14,7 +14,8 @@ const FCMModule = {
         
         try {
             // Registra Service Worker
-            const registration = await navigator.serviceWorker.register('./firebase-messaging-sw.js')
+            const registration = await navigator.serviceWorker.register('/pedeaientregador/firebase-messaging-sw.js');
+
 
             console.log('✅ Service Worker registrado');
             
