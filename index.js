@@ -1562,3 +1562,30 @@ function initTransferSystem() {
     setupTransferListener();
     setInterval(cleanExpiredOffers, 60000);
 }
+// ==================== NOTIFICATIONS ====================
+
+async function requestNotificationPermission() {
+    if (!driverData) {
+        showToast('Faça login primeiro');
+        return;
+    }
+    
+    if (Notification.permission === 'granted') {
+        showToast('Notificações já estão ativas');
+        // Tenta obter token mesmo assim
+        await setupDriverPushNotifications();
+        return;
+    }
+    
+    if (Notification.permission === 'denied') {
+        showToast('Notificações bloqueadas. Libere nas configurações do navegador.');
+        return;
+    }
+    
+    // Permissão 'default' - pode solicitar
+    await setupDriverPushNotifications();
+    
+    if (Notification.permission === 'granted') {
+        showToast('Notificações ativadas!');
+    }
+}
