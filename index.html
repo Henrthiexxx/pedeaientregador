@@ -7,7 +7,7 @@
     <meta name="theme-color" content="#000000">
     <link rel="stylesheet" href="index.css">
 </head>
-    <script src="modules/fcm.js"></script>
+   
 <body>
     <div class="toast" id="toast"></div>
     
@@ -357,6 +357,11 @@
     <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     <script src="index.js"></script>
+    <!-- ANTES do </body>, junto com os outros scripts -->
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js"></script>
+<script src="modules/fcm.js"></script>
 
     <!-- Nav Map -->
     <div class="nav-map-popup" id="navMapPopup">
