@@ -7,7 +7,6 @@
     <meta name="theme-color" content="#000000">
     <link rel="stylesheet" href="index.css">
 </head>
-   
 <body>
     <div class="toast" id="toast"></div>
     
@@ -178,7 +177,7 @@
             <div class="profile-header">
                 <div class="profile-avatar" id="profileAvatar" onclick="changeProfilePhoto()">—</div>
                 <div class="profile-name" id="profileName">Entregador</div>
-                <div class="profile-email" id="profileEmail"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="dcb9b1bdb5b09cb9a4b9b1acb0b3f2bfb3b1">[email&#160;protected]</a></div>
+                <div class="profile-email" id="profileEmail">email@exemplo.com</div>
             </div>
             
             <div class="profile-stats">
@@ -354,16 +353,6 @@
     
     <input type="file" id="photoInput" accept="image/*" style="display: none;" onchange="handlePhotoUpload(event)">
 
-    <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-    
-    <script src="modules/fcm.js"></script>
-    <script src="index.js"></script>
-    <!-- ANTES do </body>, junto com os outros scripts -->
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js"></script>
-
-
     <!-- Nav Map -->
     <div class="nav-map-popup" id="navMapPopup">
         <div class="map-header">
@@ -372,4 +361,19 @@
         </div>
         <div id="navMap"></div>
     </div>
-    <button class="nav-map-btn"
+    <button class="nav-map-btn" id="navMapBtn" onclick="openNavMap()">🗺️</button>
+
+    <!-- Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js"></script>
+    
+    <!-- Leaflet para mapa -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- App -->
+    <script src="modules/fcm.js"></script>
+    <script src="index.js"></script>
+</body>
+</html>
