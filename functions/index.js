@@ -192,7 +192,34 @@ exports.onNewOrder = functions.firestore
             return null;
         }
     });
-
+// Adicione após onNewOrder:
+exports.onOrderReady = functions.firestore
+    .document('orders/{orderId}')
+    .onUpdate(async (change, context) => {
+        const before = change.before.data();
+        const after = change.after.data();
+        
+        // Só notifica quando muda para 'ready' e tem entregador
+        if (before.status === after.status || after.status !== 'ready') return null;
+        if (!after.driverId) return null;
+        
+        const driverDoc = await db.collection('drivers').doc(after.driverId).get();
+        if (!driverDoc.exists) return null;
+        
+        const tokens = driverDoc.data().fcmTokens || [];
+        if (tokens.length === 0) return null;
+        
+        const message = {
+            notification: {
+                title: '📦 Pedido Pronto!',
+                body: `#${context.params.orderId.slice(-6).toUpperCase()} está pronto para retirada`
+            },
+            data: { type: 'order_ready', orderId: context.params.orderId },
+            tokens
+        };
+        
+        return messaging.sendEachForMulticast(message);
+    });
 function formatCurrency(value) {
     return new Intl.NumberFormat('pt-BR', { 
         style: 'currency', 
