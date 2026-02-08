@@ -9,15 +9,14 @@
 </head>
 <body>
     <div class="toast" id="toast"></div>
-    
-    <!-- Auth Page -->
-    <div id="authPage" class="auth-container">
+
+    <div class="auth-container">
         <div class="auth-logo">
             <h1>PEDRAD</h1>
             <p>Entregador</p>
         </div>
         <div class="auth-box">
-            <form onsubmit="handleLogin(event)">
+            <form id="loginForm">
                 <div class="form-group">
                     <label class="form-label">E-mail</label>
                     <input type="email" class="form-input" id="loginEmail" placeholder="seu@email.com" required>
@@ -26,358 +25,82 @@
                     <label class="form-label">Senha</label>
                     <input type="password" class="form-input" id="loginPassword" placeholder="••••••••" required>
                 </div>
-                <button type="submit" class="btn btn-primary btn-block">Entrar</button>
+                <button type="submit" class="btn btn-primary btn-block" id="loginBtn">Entrar</button>
             </form>
             <p class="auth-hint">Credenciais fornecidas pelo administrador</p>
         </div>
     </div>
-    
-    <!-- Main App -->
-    <div id="mainApp" style="display: none;">
-        <!-- Header -->
-        <header class="header">
-            <div class="header-left">
-                <div class="header-title">PEDRAD</div>
-            </div>
-            <div class="header-status">
-                <span class="status-text" id="statusText">Offline</span>
-                <div class="toggle" id="onlineToggle" onclick="toggleOnline()"></div>
-            </div>
-        </header>
-        
-        <!-- Home Page -->
-        <div id="homePage" class="page active">
-            <!-- Driver Info Card -->
-            <div class="driver-card" id="driverCard">
-                <div class="driver-avatar" id="driverAvatar" onclick="changeProfilePhoto()">—</div>
-                <div class="driver-info">
-                    <div class="driver-name" id="driverName">Carregando...</div>
-                    <div class="driver-vehicle" id="driverVehicle">-</div>
-                </div>
-                <div class="driver-rating">
-                    <span>★</span>
-                    <span id="driverRating">5.0</span>
-                </div>
-            </div>
-            <div class="profile-menu-item" onclick="requestNotificationPermission()">
-    <span class="profile-menu-icon">🔔</span>
-    <span class="profile-menu-text">Ativar Notificações</span>
-    <span class="profile-menu-arrow">›</span>
-</div>
-            <!-- Stats -->
-            <div class="stats-row">
-                <div class="stat-card">
-                    <div class="stat-value money" id="todayEarnings">R$ 0</div>
-                    <div class="stat-label">Ganhos hoje</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value" id="todayDeliveries">0</div>
-                    <div class="stat-label">Entregas</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value" id="todayDistance">0 km</div>
-                    <div class="stat-label">Percorrido</div>
-                </div>
-            </div>
-            
-            <!-- Current Delivery -->
-            <div id="currentDeliverySection" style="display: none;">
-                <div class="section-title">Entrega Atual</div>
-                <div class="current-delivery" id="currentDelivery"></div>
-            </div>
 
-            <!-- Accepted Orders -->
-            <div id="acceptedSection" style="display: none;">
-                <div class="section-title">
-                    Minhas Entregas
-                    <span class="section-badge" id="acceptedCount">0</span>
-                </div>
-                <div id="acceptedOrders"></div>
-            </div>
-
-            <!-- Transfer Offers -->
-            <div id="transferOffersSection" style="display: none;">
-                <div class="section-title">
-                    Ofertas de Troca
-                    <span class="section-badge" id="transferOffersCount">0</span>
-                </div>
-                <div id="transferOffersList"></div>
-            </div>
-            
-            <!-- Available Deliveries -->
-            <div id="availableSection">
-                <div class="section-title">
-                    Disponíveis
-                    <span class="section-badge" id="availableCount">0</span>
-                </div>
-                <div id="availableDeliveries"></div>
-            </div>
-        </div>
-        
-        <!-- History Page -->
-        <div id="historyPage" class="page">
-            <div class="section-title">Histórico</div>
-            
-            <div style="display: flex; gap: 10px; margin-bottom: 20px;">
-                <button class="btn btn-sm" id="filterToday" onclick="setHistoryFilter('today')">Hoje</button>
-                <button class="btn btn-sm btn-primary" id="filterWeek" onclick="setHistoryFilter('week')">Semana</button>
-                <button class="btn btn-sm" id="filterMonth" onclick="setHistoryFilter('month')">Mês</button>
-            </div>
-
-            <div class="stat-card" style="margin-bottom: 20px;">
-                <div class="stat-value money" id="historyEarnings">R$ 0,00</div>
-                <div class="stat-label">Total do período</div>
-            </div>
-            
-            <div id="historyList"></div>
-        </div>
-        
-        <!-- Earnings Page -->
-        <div id="earningsPage" class="page">
-            <div class="earnings-header">
-                <div class="earnings-total">
-                    <div class="earnings-label">Ganhos desta semana</div>
-                    <div class="earnings-value" id="weekEarningsTotal">R$ 0,00</div>
-                </div>
-            </div>
-            
-            <div class="section-title">Resumo</div>
-            <div class="earnings-stats">
-                <div class="earnings-stat">
-                    <div class="earnings-stat-icon">◎</div>
-                    <div class="earnings-stat-info">
-                        <div class="earnings-stat-value" id="weekDeliveriesCount">0</div>
-                        <div class="earnings-stat-label">Entregas</div>
-                    </div>
-                </div>
-                <div class="earnings-stat">
-                    <div class="earnings-stat-icon">→</div>
-                    <div class="earnings-stat-info">
-                        <div class="earnings-stat-value" id="weekDistanceTotal">0 km</div>
-                        <div class="earnings-stat-label">Percorridos</div>
-                    </div>
-                </div>
-                <div class="earnings-stat">
-                    <div class="earnings-stat-icon">◷</div>
-                    <div class="earnings-stat-info">
-                        <div class="earnings-stat-value" id="weekHoursTotal">0h</div>
-                        <div class="earnings-stat-label">Online</div>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="section-title">Pagamento</div>
-            <div class="pix-card" id="pixCard">
-                <div class="pix-icon">$</div>
-                <div class="pix-info">
-                    <div class="pix-label">Chave PIX</div>
-                    <div class="pix-value" id="pixKey">Não cadastrado</div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Profile Page -->
-        <div id="profilePage" class="page">
-            <div class="profile-header">
-                <div class="profile-avatar" id="profileAvatar" onclick="changeProfilePhoto()">—</div>
-                <div class="profile-name" id="profileName">Entregador</div>
-                <div class="profile-email" id="profileEmail">email@exemplo.com</div>
-            </div>
-            
-            <div class="profile-stats">
-                <div class="stat-card">
-                    <div class="stat-value" id="totalDeliveries">0</div>
-                    <div class="stat-label">Total entregas</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value" id="profileRating">5.0</div>
-                    <div class="stat-label">Avaliação</div>
-                </div>
-            </div>
-            
-            <div class="profile-section">
-                <div class="profile-section-title">Informações</div>
-                <div class="profile-item">
-                    <span class="profile-item-icon">☎</span>
-                    <span class="profile-item-label">Telefone</span>
-                    <span class="profile-item-value" id="profilePhone">-</span>
-                </div>
-                <div class="profile-item">
-                    <span class="profile-item-icon">◎</span>
-                    <span class="profile-item-label">Veículo</span>
-                    <span class="profile-item-value" id="profileVehicle">-</span>
-                </div>
-                <div class="profile-item">
-                    <span class="profile-item-icon">#</span>
-                    <span class="profile-item-label">Placa</span>
-                    <span class="profile-item-value" id="profilePlate">-</span>
-                </div>
-                <div class="profile-item">
-                    <span class="profile-item-icon">≡</span>
-                    <span class="profile-item-label">Max. simultâneas</span>
-                    <span class="profile-item-value" id="profileMaxOrders">1</span>
-                </div>
-            </div>
-            
-            <div class="profile-section">
-                <div class="profile-section-title">Conta</div>
-                <div class="profile-menu-item" onclick="showPage('earnings')">
-                    <span class="profile-menu-icon">$</span>
-                    <span class="profile-menu-text">Ganhos e Pagamentos</span>
-                    <span class="profile-menu-arrow">›</span>
-                </div>
-                <div class="profile-menu-item" onclick="requestLocationPermission()">
-                    <span class="profile-menu-icon">◉</span>
-                    <span class="profile-menu-text">Permissão de Localização</span>
-                    <span class="profile-menu-arrow">›</span>
-                </div>
-                <div class="profile-menu-item logout" onclick="handleLogout()">
-                    <span class="profile-menu-icon">→</span>
-                    <span class="profile-menu-text">Sair</span>
-                    <span class="profile-menu-arrow">›</span>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Navigation -->
-        <nav class="nav">
-            <div class="nav-item active" onclick="showPage('home')">
-                <span class="nav-icon">⌂</span>
-                <span class="nav-label">Início</span>
-            </div>
-            <div class="nav-item" onclick="showPage('history')">
-                <span class="nav-icon">≡</span>
-                <span class="nav-label">Histórico</span>
-            </div>
-            <div class="nav-item" onclick="showPage('earnings')">
-                <span class="nav-icon">$</span>
-                <span class="nav-label">Ganhos</span>
-            </div>
-            <div class="nav-item" onclick="showPage('profile')">
-                <span class="nav-icon">○</span>
-                <span class="nav-label">Perfil</span>
-            </div>
-        </nav>
-    </div>
-    
-    <!-- Accept Modal -->
-    <div class="modal" id="acceptModal">
-        <div class="modal-content">
-            <div class="modal-icon">◎</div>
-            <div class="modal-title">Aceitar Entrega?</div>
-            <div class="modal-text" id="acceptModalText">Loja → Bairro</div>
-            <div class="modal-info" id="acceptModalInfo"></div>
-            <div class="modal-actions">
-                <button class="btn btn-secondary" onclick="closeModal('acceptModal')">Cancelar</button>
-                <button class="btn btn-primary" onclick="confirmAccept()">Aceitar</button>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Pickup Modal -->
-    <div class="modal" id="pickupModal">
-        <div class="modal-content">
-            <div class="modal-icon">□</div>
-            <div class="modal-title">Retirou o pedido?</div>
-            <div class="modal-text">Confirme que pegou o pedido na loja</div>
-            <div class="modal-actions">
-                <button class="btn btn-secondary" onclick="closeModal('pickupModal')">Ainda não</button>
-                <button class="btn btn-warning" onclick="confirmPickup()">Já peguei</button>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Delivery Complete Modal -->
-    <div class="modal" id="deliverModal">
-        <div class="modal-content">
-            <div class="modal-icon">✓</div>
-            <div class="modal-title">Finalizar Entrega</div>
-            <div class="modal-text">Confirme a entrega e envie sua localização</div>
-            
-            <div class="location-box" id="locationBox">
-                <div class="location-status" id="locationStatus">
-                    <span class="location-icon">◉</span>
-                    <span class="location-text">Capturando localização...</span>
-                </div>
-            </div>
-            
-            <div class="modal-actions">
-                <button class="btn btn-secondary" onclick="closeModal('deliverModal')">Cancelar</button>
-                <button class="btn btn-success" onclick="confirmDelivery()" id="confirmDeliveryBtn" disabled>
-                    Aguarde GPS...
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Transfer Modal -->
-    <div class="modal" id="transferModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <div class="modal-title">Trocar Entrega</div>
-                <button class="modal-close" onclick="closeModal('transferModal')">×</button>
-            </div>
-            <div class="modal-body">
-                <div class="transfer-current-order">
-                    <span class="transfer-label">Sua entrega atual</span>
-                    <span class="transfer-value" id="transferOrderInfo">-</span>
-                </div>
-                
-                <div class="transfer-select-section">
-                    <span class="transfer-label">Selecione os bairros que você aceita em troca</span>
-                    <div id="transferNeighborhoods" class="transfer-neighborhoods"></div>
-                </div>
-                
-                <p class="transfer-hint">
-                    Outros entregadores com entregas nesses bairros poderão propor a troca.
-                    A oferta expira em 30 minutos.
-                </p>
-                
-                <button class="btn btn-primary" onclick="createTransferOffer()">
-                    Criar oferta de troca
-                </button>
-                <button class="btn btn-secondary" onclick="closeModal('transferModal')" style="margin-top: 8px;">
-                    Cancelar
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Confirm Modal -->
-    <div class="modal" id="confirmModal">
-        <div class="modal-content">
-            <div class="modal-title" id="confirmModalTitle">Confirmar</div>
-            <div class="modal-text" id="confirmModalText">Deseja continuar?</div>
-            <div class="modal-actions">
-                <button class="btn btn-secondary" id="confirmModalCancel" onclick="closeModal('confirmModal')">Cancelar</button>
-                <button class="btn btn-primary" id="confirmModalBtn">Confirmar</button>
-            </div>
-        </div>
-    </div>
-    
-    <input type="file" id="photoInput" accept="image/*" style="display: none;" onchange="handlePhotoUpload(event)">
-
-    <!-- Nav Map -->
-    <div class="nav-map-popup" id="navMapPopup">
-        <div class="map-header">
-            <span class="map-title">Destino</span>
-            <button class="map-close" onclick="closeNavMap()">×</button>
-        </div>
-        <div id="navMap"></div>
-    </div>
-    <button class="nav-map-btn" id="navMapBtn" onclick="openNavMap()">🗺️</button>
-
-    <!-- Firebase -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js"></script>
-    
-    <!-- Leaflet para mapa -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    
-    <!-- App -->
-    <script src="modules/fcm.js"></script>
-    <script src="index.js"></script>
+    <script src="modules/cache.js"></script>
+    <script src="modules/firebase-init.js"></script>
+    <script>
+        // If already logged in, go to home
+        const savedId = localStorage.getItem('pedrad_driver_id');
+        if (savedId) {
+            window.location.href = 'home.html';
+        }
+
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 3000);
+        }
+
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('loginBtn');
+            btn.disabled = true;
+            btn.textContent = 'Entrando...';
+
+            const email = document.getElementById('loginEmail').value.trim().toLowerCase();
+            const password = document.getElementById('loginPassword').value;
+
+            try {
+                const snapshot = await db.collection('drivers')
+                    .where('email', '==', email)
+                    .limit(1)
+                    .get();
+
+                if (snapshot.empty) {
+                    showToast('Entregador não cadastrado');
+                    btn.disabled = false;
+                    btn.textContent = 'Entrar';
+                    return;
+                }
+
+                const driver = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
+
+                if (driver.status === 'blocked') {
+                    showToast('Sua conta está bloqueada');
+                    btn.disabled = false;
+                    btn.textContent = 'Entrar';
+                    return;
+                }
+
+                if (driver.password !== password) {
+                    showToast('Senha incorreta');
+                    btn.disabled = false;
+                    btn.textContent = 'Entrar';
+                    return;
+                }
+
+                // Save session
+                Cache.setDriverId(driver.id);
+                Cache.setDriver(driver);
+                Cache.setOnline(false);
+
+                window.location.href = 'home.html';
+
+            } catch (err) {
+                console.error('Login error:', err);
+                showToast('Erro ao entrar');
+                btn.disabled = false;
+                btn.textContent = 'Entrar';
+            }
+        });
+    </script>
 </body>
 </html>

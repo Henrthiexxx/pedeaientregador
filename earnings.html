@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Pedrad - Ganhos</title>
+    <meta name="theme-color" content="#000000">
+    <link rel="stylesheet" href="index.css">
+</head>
+<body>
+    <div class="toast" id="toast"></div>
+
+    <header class="header">
+        <div class="header-title">PEDRAD</div>
+        <span class="status-text">Ganhos</span>
+    </header>
+
+    <div class="page active">
+        <div class="earnings-header">
+            <div class="earnings-label">Ganhos desta semana</div>
+            <div class="earnings-value" id="weekEarnings">R$ 0,00</div>
+        </div>
+
+        <div class="section-title">Resumo</div>
+        <div class="earnings-stats">
+            <div class="earnings-stat">
+                <div class="earnings-stat-icon">◎</div>
+                <div>
+                    <div class="earnings-stat-value" id="weekDeliveries">0</div>
+                    <div class="earnings-stat-label">Entregas</div>
+                </div>
+            </div>
+            <div class="earnings-stat">
+                <div class="earnings-stat-icon">→</div>
+                <div>
+                    <div class="earnings-stat-value" id="weekDistance">0 km</div>
+                    <div class="earnings-stat-label">Percorridos</div>
+                </div>
+            </div>
+            <div class="earnings-stat">
+                <div class="earnings-stat-icon">◷</div>
+                <div>
+                    <div class="earnings-stat-value" id="weekHours">0h</div>
+                    <div class="earnings-stat-label">Online</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Idle Driver Earnings (only for store drivers) -->
+        <div id="idleEarningsSection" style="display:none;">
+            <div class="section-title">Renda Extra (App)</div>
+            <div class="stat-card" style="margin-bottom:24px;">
+                <div class="stat-value money" id="idleEarnings">R$ 0,00</div>
+                <div class="stat-label">Ganhos via entregas do app</div>
+            </div>
+        </div>
+
+        <div class="section-title">Pagamento</div>
+        <div class="pix-card">
+            <div class="pix-icon">$</div>
+            <div>
+                <div class="pix-label">Chave PIX</div>
+                <div class="pix-value" id="pixKey">Não cadastrado</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm Modal -->
+    <div class="modal" id="confirmModal">
+        <div class="modal-content">
+            <div class="modal-title" id="confirmModalTitle">Confirmar</div>
+            <div class="modal-text" id="confirmModalText">-</div>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeModal('confirmModal')">Cancelar</button>
+                <button class="btn btn-primary" id="confirmModalBtn">Confirmar</button>
+            </div>
+        </div>
+    </div>
+
+    <nav class="nav" id="bottomNav"></nav>
+
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <script src="modules/cache.js"></script>
+    <script src="modules/firebase-init.js"></script>
+    <script src="modules/shared.js"></script>
+    <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+        const ok = await checkAuth();
+        if (!ok) return;
+
+        renderBottomNav('earnings.html');
+        await loadSharedData();
+
+        document.getElementById('pixKey').textContent = driverData.pix || 'Não cadastrado';
+
+        // Show idle earnings section for store drivers
+        if (driverData.driverType === 'store') {
+            document.getElementById('idleEarningsSection').style.display = 'block';
+        }
+
+        await loadEarnings();
+    });
+
+    async function loadEarnings() {
+        let allHistory = Cache.getHistory();
+
+        if (!allHistory) {
+            try {
+                const snapshot = await db.collection('orders')
+                    .where('driverId', '==', driverData.id)
+                    .where('status', '==', 'delivered')
+                    .get();
+                allHistory = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                Cache.setHistory(allHistory);
+            } catch (e) {
+                console.error('Error loading earnings:', e);
+                return;
+            }
+        }
+
+        const weekAgo = new Date(Date.now() - 7 * 86400000);
+        const weekOrders = allHistory.filter(o => {
+            const d = o.deliveredAt?.toDate?.() || new Date(o.deliveredAt);
+            return d >= weekAgo;
+        });
+
+        let money = 0, dist = 0, idleMoney = 0;
+        weekOrders.forEach(o => {
+            const fee = o.driverEarning || getDeliveryFee(o.address?.neighborhood);
+            const earning = calculateDriverEarning(fee, o.distance);
+            money += earning;
+            dist += o.distance || 3.5;
+
+            // Track idle driver earnings (orders from app while store driver)
+            if (o.idleDriverTrip) idleMoney += earning;
+        });
+
+        document.getElementById('weekEarnings').textContent = formatCurrency(money);
+        document.getElementById('weekDeliveries').textContent = weekOrders.length;
+        document.getElementById('weekDistance').textContent = `${dist.toFixed(1)} km`;
+        document.getElementById('weekHours').textContent = `${(weekOrders.length * 0.5).toFixed(0)}h`;
+
+        if (driverData.driverType === 'store') {
+            document.getElementById('idleEarnings').textContent = formatCurrency(idleMoney);
+        }
+    }
+    </script>
+</body>
+</html>

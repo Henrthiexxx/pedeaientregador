@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Pedrad - Histórico</title>
+    <meta name="theme-color" content="#000000">
+    <link rel="stylesheet" href="index.css">
+</head>
+<body>
+    <div class="toast" id="toast"></div>
+
+    <header class="header">
+        <div class="header-title">PEDRAD</div>
+        <span class="status-text">Histórico</span>
+    </header>
+
+    <div class="page active">
+        <div style="display:flex;gap:10px;margin-bottom:20px;">
+            <button class="btn btn-sm" id="filterToday" onclick="setFilter('today')">Hoje</button>
+            <button class="btn btn-sm btn-primary" id="filterWeek" onclick="setFilter('week')">Semana</button>
+            <button class="btn btn-sm" id="filterMonth" onclick="setFilter('month')">Mês</button>
+        </div>
+
+        <div class="stat-card" style="margin-bottom:20px;">
+            <div class="stat-value money" id="historyEarnings">R$ 0,00</div>
+            <div class="stat-label">Total do período</div>
+        </div>
+
+        <div id="historyList"></div>
+    </div>
+
+    <!-- Confirm Modal -->
+    <div class="modal" id="confirmModal">
+        <div class="modal-content">
+            <div class="modal-title" id="confirmModalTitle">Confirmar</div>
+            <div class="modal-text" id="confirmModalText">-</div>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeModal('confirmModal')">Cancelar</button>
+                <button class="btn btn-primary" id="confirmModalBtn">Confirmar</button>
+            </div>
+        </div>
+    </div>
+
+    <nav class="nav" id="bottomNav"></nav>
+
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <script src="modules/cache.js"></script>
+    <script src="modules/firebase-init.js"></script>
+    <script src="modules/shared.js"></script>
+    <script>
+    let allHistory = [];
+    let historyFilter = 'week';
+
+    document.addEventListener('DOMContentLoaded', async () => {
+        const ok = await checkAuth();
+        if (!ok) return;
+
+        renderBottomNav('history.html');
+        await loadSharedData();
+        await loadHistory();
+    });
+
+    async function loadHistory() {
+        // Try cache first
+        const cached = Cache.getHistory();
+        if (cached) {
+            allHistory = cached;
+            renderHistory();
+        }
+
+        // Always refresh from Firestore (but render cache immediately)
+        try {
+            const snapshot = await db.collection('orders')
+                .where('driverId', '==', driverData.id)
+                .where('status', '==', 'delivered')
+                .get();
+
+            allHistory = snapshot.docs
+                .map(doc => ({ id: doc.id, ...doc.data() }))
+                .sort((a, b) => {
+                    const da = a.deliveredAt?.toDate?.() || new Date(a.deliveredAt);
+                    const db2 = b.deliveredAt?.toDate?.() || new Date(b.deliveredAt);
+                    return db2 - da;
+                });
+
+            Cache.setHistory(allHistory);
+            renderHistory();
+        } catch (e) {
+            console.error('Error loading history:', e);
+        }
+    }
+
+    function setFilter(filter) {
+        historyFilter = filter;
+        document.querySelectorAll('[id^="filter"]').forEach(btn => {
+            btn.classList.remove('btn-primary');
+            btn.classList.add('btn-secondary');
+        });
+        const id = 'filter' + filter.charAt(0).toUpperCase() + filter.slice(1);
+        document.getElementById(id)?.classList.add('btn-primary');
+        document.getElementById(id)?.classList.remove('btn-secondary');
+        renderHistory();
+    }
+
+    function getFiltered() {
+        const now = new Date();
+        let start;
+        if (historyFilter === 'today') {
+            start = new Date(); start.setHours(0, 0, 0, 0);
+        } else if (historyFilter === 'week') {
+            start = new Date(now.getTime() - 7 * 86400000);
+        } else {
+            start = new Date(now.getTime() - 30 * 86400000);
+        }
+        return allHistory.filter(o => {
+            const d = o.deliveredAt?.toDate?.() || new Date(o.deliveredAt);
+            return d >= start;
+        });
+    }
+
+    function renderHistory() {
+        const container = document.getElementById('historyList');
+        const filtered = getFiltered();
+
+        if (filtered.length === 0) {
+            container.innerHTML = `<div class="empty-state">
+                <div class="empty-state-icon">—</div>
+                <div class="empty-state-title">Nenhuma entrega neste período</div>
+                <div class="empty-state-text">Suas entregas aparecerão aqui</div>
+            </div>`;
+            document.getElementById('historyEarnings').textContent = formatCurrency(0);
+            return;
+        }
+
+        let total = 0;
+        container.innerHTML = filtered.map(order => {
+            const time = order.deliveredAt?.toDate?.() || new Date(order.deliveredAt);
+            const timeStr = time.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+            const dateStr = time.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+            const fee = order.driverEarning || getDeliveryFee(order.address?.neighborhood);
+            const earning = calculateDriverEarning(fee, order.distance);
+            total += earning;
+
+            return `<div class="history-item">
+                <div class="history-info">
+                    <div class="history-store">${order.storeName || 'Loja'}</div>
+                    <div class="history-time">${dateStr} ${timeStr} - ${order.distance ? order.distance.toFixed(1) + ' km' : order.address?.neighborhood || ''}</div>
+                </div>
+                <div class="history-value">+ ${formatCurrency(earning)}</div>
+            </div>`;
+        }).join('');
+
+        document.getElementById('historyEarnings').textContent = formatCurrency(total);
+    }
+    </script>
+</body>
+</html>
