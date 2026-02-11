@@ -692,7 +692,7 @@ function renderAvailableOrders() {
     const maxOrders = driverData.maxSimultaneousOrders || 1;
         if (!pendingAcceptOrder || !driverData) return;
 
-        const maxOrders = driverData.maxSimultaneousOrders || 1;
+       
         const myActive = acceptedOrders.length + (currentDelivery ? 1 : 0);
         if (myActive >= maxOrders) {
             closeModal('acceptModal');
