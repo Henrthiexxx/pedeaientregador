@@ -247,7 +247,7 @@
                 .get();
             availableOrders = snapshot.docs
                 .map(doc => ({ id: doc.id, ...doc.data() }))
-                .filter(o => !o.driverId);
+                .filter(o => !o.driverId && o.deliveryMode !== 'pickup');
             renderAvailableOrders();
         } catch (e) { console.error('Error loading orders:', e); }
     }
@@ -308,7 +308,7 @@
                 const prev = availableOrders.length;
                 availableOrders = snapshot.docs
                     .map(doc => ({ id: doc.id, ...doc.data() }))
-                    .filter(o => !o.driverId);
+                    .filter(o => !o.driverId && o.deliveryMode !== 'pickup');
                 renderAvailableOrders();
 
                 if (availableOrders.length > prev && isOnline && !currentDelivery) {
@@ -364,98 +364,104 @@
     }
 
     // ==================== RENDER ====================
-    function renderAvailableOrders() {
-        const container = document.getElementById('availableDeliveries');
-        document.getElementById('availableCount').textContent = availableOrders.length;
+function renderAvailableOrders() {
+    const container = document.getElementById('availableDeliveries');
 
-        if (!isOnline) {
-            container.innerHTML = `<div class="empty-state">
-                <div class="empty-state-icon">○</div>
-                <div class="empty-state-title">Você está offline</div>
-                <div class="empty-state-text">Ative o botão acima para receber entregas</div>
-            </div>`;
-            return;
-        }
+    // Store driver: só vê pedidos da própria loja
+    let filtered = availableOrders;
+    if (driverData?.driverType === 'store' && driverData?.storeId) {
+        filtered = availableOrders.filter(o => o.storeId === driverData.storeId);
+    }
 
-        const maxOrders = driverData?.maxSimultaneousOrders || 1;
-        const myActive = (acceptedOrders.length || 0) + (currentDelivery ? 1 : 0);
+    document.getElementById('availableCount').textContent = filtered.length;
 
-        if (myActive >= maxOrders) {
-            container.innerHTML = `<div class="empty-state">
-                <div class="empty-state-icon">◎</div>
-                <div class="empty-state-title">Limite atingido</div>
-                <div class="empty-state-text">Finalize suas entregas antes de aceitar novas</div>
-            </div>`;
-            return;
-        }
+    if (!isOnline) {
+        container.innerHTML = `<div class="empty-state">
+            <div class="empty-state-icon">○</div>
+            <div class="empty-state-title">Você está offline</div>
+            <div class="empty-state-text">Ative o botão acima para receber entregas</div>
+        </div>`;
+        return;
+    }
 
-        if (availableOrders.length === 0) {
-            container.innerHTML = `<div class="empty-state">
-                <div class="empty-state-icon">—</div>
-                <div class="empty-state-title">Nenhuma entrega disponível</div>
-                <div class="empty-state-text">Aguarde novos pedidos</div>
-            </div>`;
-            return;
-        }
+    const maxOrders = driverData?.maxSimultaneousOrders || 1;
+    const myActive = (acceptedOrders.length || 0) + (currentDelivery ? 1 : 0);
 
-        container.innerHTML = availableOrders.map(order => {
-            const waitTime = getWaitTime(order.createdAt);
-            const fee = getDeliveryFee(order.address?.neighborhood);
-            const earning = calculateDriverEarning(fee, order.distance);
+    if (myActive >= maxOrders) {
+        container.innerHTML = `<div class="empty-state">
+            <div class="empty-state-icon">◎</div>
+            <div class="empty-state-title">Limite atingido</div>
+            <div class="empty-state-text">Finalize suas entregas antes de aceitar novas</div>
+        </div>`;
+        return;
+    }
 
-            return `
-            <div class="delivery-card ${waitTime > 15 ? 'urgent' : ''}" id="order-${order.id}">
-                <div class="delivery-header">
-                    <div class="delivery-store">
-                        <div class="delivery-store-icon" id="icon-${order.id}">□</div>
-                        <div>
-                            <div class="delivery-store-name">${order.storeName || 'Loja'}</div>
-                            <div class="delivery-store-time">Aguardando há ${waitTime} min</div>
-                        </div>
-                    </div>
-                    <div class="delivery-value">
-                        <div class="delivery-fee">+ ${formatCurrency(earning)}</div>
-                        <div class="delivery-distance">${order.distance ? order.distance.toFixed(1) + ' km' : order.address?.neighborhood || ''}</div>
-                    </div>
-                </div>
-                <div class="delivery-body">
-                    <div class="delivery-address">
-                        <div class="address-icon">□</div>
-                        <div class="address-info">
-                            <div class="address-label">Retirar em</div>
-                            <div class="address-text">${order.storeName || 'Loja'}</div>
-                        </div>
-                    </div>
-                    <div class="delivery-address">
-                        <div class="address-icon">◎</div>
-                        <div class="address-info">
-                            <div class="address-label">Entregar em</div>
-                            <div class="address-text">${order.address?.street || ''}, ${order.address?.number || ''} - ${order.address?.neighborhood || ''}</div>
-                        </div>
-                    </div>
-                    <div class="delivery-actions">
-                        <button class="btn btn-primary" onclick="acceptOrder('${order.id}')">Aceitar Entrega</button>
+    if (filtered.length === 0) {
+        container.innerHTML = `<div class="empty-state">
+            <div class="empty-state-icon">—</div>
+            <div class="empty-state-title">Nenhuma entrega disponível</div>
+            <div class="empty-state-text">Aguarde novos pedidos</div>
+        </div>`;
+        return;
+    }
+
+    container.innerHTML = filtered.map(order => {
+        const waitTime = getWaitTime(order.createdAt);
+        const fee = getDeliveryFee(order.address?.neighborhood);
+        const earning = calculateDriverEarning(fee, order.distance);
+
+        return `
+        <div class="delivery-card ${waitTime > 15 ? 'urgent' : ''}" id="order-${order.id}">
+            <div class="delivery-header">
+                <div class="delivery-store">
+                    <div class="delivery-store-icon" id="icon-${order.id}">□</div>
+                    <div>
+                        <div class="delivery-store-name">${order.storeName || 'Loja'}</div>
+                        <div class="delivery-store-time">Aguardando há ${waitTime} min</div>
                     </div>
                 </div>
-            </div>`;
-        }).join('');
+                <div class="delivery-value">
+                    <div class="delivery-fee">+ ${formatCurrency(earning)}</div>
+                    <div class="delivery-distance">${order.distance ? order.distance.toFixed(1) + ' km' : order.address?.neighborhood || ''}</div>
+                </div>
+            </div>
+            <div class="delivery-body">
+                <div class="delivery-address">
+                    <div class="address-icon">□</div>
+                    <div class="address-info">
+                        <div class="address-label">Retirar em</div>
+                        <div class="address-text">${order.storeName || 'Loja'}</div>
+                    </div>
+                </div>
+                <div class="delivery-address">
+                    <div class="address-icon">◎</div>
+                    <div class="address-info">
+                        <div class="address-label">Entregar em</div>
+                        <div class="address-text">${order.address?.street || ''}, ${order.address?.number || ''} - ${order.address?.neighborhood || ''}</div>
+                    </div>
+                </div>
+                <div class="delivery-actions">
+                    <button class="btn btn-primary" onclick="acceptOrder('${order.id}')">Aceitar Entrega</button>
+                </div>
+            </div>
+        </div>`;
+    }).join('');
 
-        // Load store logos async
-        availableOrders.forEach(async order => {
-            if (order.storeId) {
-                const store = await getStoreData(order.storeId);
-                if (store?.logoUrl) {
-                    const el = document.getElementById('icon-' + order.id);
-                    if (el) {
-                        el.style.backgroundImage = `url(${store.logoUrl})`;
-                        el.style.backgroundSize = 'cover';
-                        el.style.backgroundPosition = 'center';
-                        el.textContent = '';
-                    }
+    filtered.forEach(async order => {
+        if (order.storeId) {
+            const store = await getStoreData(order.storeId);
+            if (store?.logoUrl) {
+                const el = document.getElementById('icon-' + order.id);
+                if (el) {
+                    el.style.backgroundImage = `url(${store.logoUrl})`;
+                    el.style.backgroundSize = 'cover';
+                    el.style.backgroundPosition = 'center';
+                    el.textContent = '';
                 }
             }
-        });
-    }
+        }
+    });
+}
 
     function renderAcceptedOrders() {
         const section = document.getElementById('acceptedSection');
@@ -674,6 +680,16 @@
     }
 
     async function confirmAccept() {
+            if (!pendingAcceptOrder || !driverData) return;
+
+    // Store driver: bloqueia pedidos de outras lojas
+    if (driverData.driverType === 'store' && driverData.storeId && pendingAcceptOrder.storeId !== driverData.storeId) {
+        closeModal('acceptModal');
+        showToast('Você só pode aceitar entregas da sua loja');
+        return;
+    }
+
+    const maxOrders = driverData.maxSimultaneousOrders || 1;
         if (!pendingAcceptOrder || !driverData) return;
 
         const maxOrders = driverData.maxSimultaneousOrders || 1;
