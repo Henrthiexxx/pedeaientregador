@@ -997,8 +997,8 @@ function acceptOrder(orderId) {
 async function confirmAccept() {
     if (!pendingAcceptOrder || !driverData) return;
 
-    const maxOrders = driverData.maxSimultaneousOrders || 1;
-    const myActiveCount = acceptedOrders.length + (currentDelivery ? 1 : 0);
+    
+    
     
     if (myActiveCount >= maxOrders) {
         closeModal('acceptModal');
