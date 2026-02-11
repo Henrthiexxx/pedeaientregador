@@ -797,73 +797,53 @@
         );
     }
 
-    async function confirmDelivery() {
-        if (!currentDelivery) return;
-        stopLocationTracking();
+async function confirmDelivery() {
+    if (!currentDelivery) return;
+    const deliveryRef = currentDelivery; // salva referência local
+    stopLocationTracking();
 
-        try {
-            const timeline = currentDelivery.timeline || [];
-            timeline.push({
-                status: 'delivered',
-                timestamp: new Date().toISOString(),
-                message: 'Pedido entregue ao cliente',
-                location: capturedLocation
+    try {
+        const timeline = deliveryRef.timeline || [];
+        timeline.push({
+            status: 'delivered',
+            timestamp: new Date().toISOString(),
+            message: 'Pedido entregue ao cliente',
+            location: capturedLocation
+        });
+
+        const updateData = {
+            status: 'delivered',
+            timeline,
+            deliveredAt: new Date().toISOString(),
+            driverLocation: null
+        };
+        if (capturedLocation) updateData.deliveryLocation = capturedLocation;
+
+        await db.collection('orders').doc(deliveryRef.id).update(updateData);
+
+        if (driverData) {
+            await db.collection('drivers').doc(driverData.id).update({
+                totalDeliveries: firebase.firestore.FieldValue.increment(1),
+                lastDeliveryAt: firebase.firestore.FieldValue.serverTimestamp()
             });
-
-            const updateData = {
-                status: 'delivered',
-                timeline,
-                deliveredAt: new Date().toISOString(),
-                driverLocation: null
-            };
-            if (capturedLocation) updateData.deliveryLocation = capturedLocation;
-
-            await db.collection('orders').doc(currentDelivery.id).update(updateData);
-
-            if (driverData) {
-                await db.collection('drivers').doc(driverData.id).update({
-                    totalDeliveries: firebase.firestore.FieldValue.increment(1),
-                    lastDeliveryAt: firebase.firestore.FieldValue.serverTimestamp()
-                });
-            }
-
-            // Idle driver: trip ended
-            if (IdleDriver.isStoreDriver()) {
-                IdleDriver.transition('APP_TRIP_ENDED');
-            }
-
-            // Invalidate history cache
-            Cache.remove('history');
-
-            const earning = currentDelivery.driverEarning || platformConfig.driverFee;
-            closeModal('deliverModal');
-            hideNavMapButton();
-            showToast(`Entrega concluída +${formatCurrency(earning)}`);
-            capturedLocation = null;
-        } catch (e) {
-            console.error('Error confirming delivery:', e);
-            showToast('Erro: ' + (e.message || 'Tente novamente'));
         }
-    }
 
-    // ==================== LOCATION TRACKING ====================
-    function startLocationTracking() {
-        if (!navigator.geolocation) return;
-        stopLocationTracking();
-        locationWatchId = navigator.geolocation.watchPosition(
-            (pos) => {
-                const now = Date.now();
-                if (now - lastLocationUpdate < 10000) return;
-                lastLocationUpdate = now;
-                updateDriverLocationInOrder({
-                    lat: pos.coords.latitude, lng: pos.coords.longitude,
-                    accuracy: pos.coords.accuracy, updatedAt: new Date().toISOString()
-                });
-            },
-            (e) => console.error('Location error:', e.message),
-            { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
-        );
+        if (IdleDriver.isStoreDriver()) {
+            IdleDriver.transition('APP_TRIP_ENDED');
+        }
+
+        Cache.remove('history');
+
+        const earning = deliveryRef.driverEarning || platformConfig.driverFee;
+        closeModal('deliverModal');
+        hideNavMapButton();
+        showToast(`Entrega concluída +${formatCurrency(earning)}`);
+        capturedLocation = null;
+    } catch (e) {
+        console.error('Error confirming delivery:', e);
+        showToast('Erro: ' + (e.message || 'Tente novamente'));
     }
+}
 
     function stopLocationTracking() {
         if (locationWatchId !== null) {
