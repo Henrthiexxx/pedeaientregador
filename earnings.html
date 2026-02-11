@@ -6,8 +6,14 @@
     <title>Pedrad - Ganhos</title>
     <meta name="theme-color" content="#000000">
     <link rel="stylesheet" href="index.css">
+    
 </head>
 <body>
+    <style>
+    .page { padding-bottom: 90px; }
+    .earnings-stats { grid-template-columns: 1fr; }
+    @media (min-width: 400px) { .earnings-stats { grid-template-columns: repeat(3, 1fr); } }
+</style>
     <div class="toast" id="toast"></div>
 
     <header class="header">
