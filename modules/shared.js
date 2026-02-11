@@ -217,6 +217,10 @@ function renderBottomNav(activePage) {
 
 function playNotificationSound() {
     try {
-        if ('vibrate' in navigator) navigator.vibrate([200, 100, 200]);
+        const audio = new Audio('notify.mp3');
+        audio.play().catch(() => {});
+        if ('vibrate' in navigator) {
+            navigator.vibrate([200, 100, 200]);
+        }
     } catch (e) {}
 }
