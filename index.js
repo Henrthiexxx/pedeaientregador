@@ -534,12 +534,13 @@ function setupRealtimeListeners() {
 
 function playNotificationSound() {
     try {
+        const audio = new Audio('notify.mp3');
+        audio.play().catch(() => {});
         if ('vibrate' in navigator) {
             navigator.vibrate([200, 100, 200]);
         }
     } catch (e) {}
 }
-
 // ==================== RENDER ====================
 
 function renderAvailableOrders() {
