@@ -861,6 +861,39 @@ async function confirmDelivery() {
     }
 }
 
+function startLocationTracking() {
+    if (!navigator.geolocation) return;
+
+    // evita duplicar watch
+    stopLocationTracking();
+
+    lastLocationUpdate = 0;
+
+    locationWatchId = navigator.geolocation.watchPosition(
+        async (pos) => {
+            const now = Date.now();
+
+            // throttle (ex: 5s)
+            if (now - lastLocationUpdate < 5000) return;
+            lastLocationUpdate = now;
+
+            const location = {
+                lat: pos.coords.latitude,
+                lng: pos.coords.longitude,
+                accuracy: pos.coords.accuracy,
+                timestamp: new Date().toISOString()
+            };
+
+            await updateDriverLocationInOrder(location);
+        },
+        (err) => {
+            console.warn('GPS watch error:', err);
+        },
+        { enableHighAccuracy: true, maximumAge: 3000, timeout: 15000 }
+    );
+}
+
+
     function stopLocationTracking() {
         if (locationWatchId !== null) {
             navigator.geolocation.clearWatch(locationWatchId);
