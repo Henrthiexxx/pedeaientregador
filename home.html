@@ -613,7 +613,10 @@ function renderAvailableOrders() {
     }
 
     // ==================== ACTIONS ====================
-    function toggleOnline() {
+    async function toggleOnline() {
+        if (!FCMModule.token && Notification.permission === 'default') {
+    await setupDriverPushNotifications();
+}
         isOnline = !isOnline;
         document.getElementById('onlineToggle').classList.toggle('active', isOnline);
         document.getElementById('statusText').textContent = isOnline ? 'Online' : 'Offline';
