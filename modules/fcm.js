@@ -13,27 +13,25 @@ const FCMModule = {
             return false;
         }
         try {
-            this.swReg = await navigator.serviceWorker.register('/pedeaientregador/firebase-messaging-sw.js', {
-                scope: '/pedeaientregador/'
+            // Detecta path automaticamente baseado na URL atual
+            const basePath = location.pathname.substring(0, location.pathname.lastIndexOf('/') + 1);
+            this.swReg = await navigator.serviceWorker.register(basePath + 'firebase-messaging-sw.js', {
+                scope: basePath
             });
-            console.log('✅ SW registrado');
+            console.log('✅ SW registrado em', basePath);
 
             this.messaging = firebase.messaging();
 
-            // Foreground: notificação visual + som custom
             this.messaging.onMessage((payload) => {
                 console.log('📩 Foreground:', payload);
                 this.handleForegroundNotification(payload);
             });
 
-            // Carrega som custom salvo
             this.loadCustomSound();
 
-            // Escuta cliques em notificações (quando app está aberto)
             navigator.serviceWorker.addEventListener('message', (event) => {
                 if (event.data?.type === 'NOTIFICATION_CLICK') {
-                    const data = event.data.data || {};
-                    this.handleNotificationClick(data);
+                    this.handleNotificationClick(event.data.data || {});
                 }
             });
 
@@ -246,15 +244,33 @@ const FCMModule = {
         this.playNotificationSound(true);
     }
 };
-
 // ==================== SETUP FUNCTIONS ====================
 
 async function setupDriverPushNotifications() {
     const initialized = await FCMModule.init();
     if (!initialized) return;
     const token = await FCMModule.requestPermissionAndGetToken();
-    if (token && driverData) {
+    if (token && typeof driverData !== 'undefined' && driverData) {
         await FCMModule.saveTokenToFirestore(driverData.id, 'driver');
+    }
+}
+
+async function setupClientPushNotifications() {
+    const initialized = await FCMModule.init();
+    if (!initialized) return;
+    const token = await FCMModule.requestPermissionAndGetToken();
+    if (token) {
+        const uid = localStorage.getItem('auth_uid');
+        if (uid) await FCMModule.saveTokenToFirestore(uid, 'customer');
+    }
+}
+
+async function setupStorePushNotifications(storeId) {
+    const initialized = await FCMModule.init();
+    if (!initialized) return;
+    const token = await FCMModule.requestPermissionAndGetToken();
+    if (token && storeId) {
+        await FCMModule.saveTokenToFirestore(storeId, 'store');
     }
 }
 
