@@ -150,37 +150,7 @@
 </div>
 
 
-<!-- ====== BLOCO 2: Seção "Segurança" (inserir APÓS a seção "Conta") ====== -->
 
-<div class="profile-section" id="securitySection">
-    <div class="profile-section-title">🔐 Segurança</div>
-    
-    <!-- Email verification status -->
-    <div class="profile-item" id="emailStatusItem">
-        <span class="profile-item-icon">📧</span>
-        <span class="profile-item-label">E-mail</span>
-        <span class="profile-item-value" id="emailStatusValue">-</span>
-    </div>
-
-    <!-- Change Email -->
-    <div class="profile-menu-item" onclick="toggleSection('changeEmailSection')">
-        <span class="profile-menu-icon">✏️</span>
-        <span class="profile-menu-text">Alterar E-mail</span>
-        <span class="profile-menu-arrow">›</span>
-    </div>
-    <div id="changeEmailSection" class="collapsible-section" style="display:none;">
-        <div class="section-form">
-            <div class="form-group">
-                <label class="form-label-sm">Novo e-mail</label>
-                <input type="email" class="form-input-sm" id="newEmailInput" placeholder="novo@email.com">
-            </div>
-            <div class="form-group">
-                <label class="form-label-sm">Senha atual (confirmação)</label>
-                <input type="password" class="form-input-sm" id="emailConfirmPassword" placeholder="Sua senha">
-            </div>
-            <button class="btn-action" onclick="handleChangeEmail()">Alterar E-mail</button>
-        </div>
-    </div>
 
     <!-- Change Password -->
     <div class="profile-menu-item" onclick="toggleSection('changePasswordSection')">
