@@ -613,10 +613,12 @@ function renderAvailableOrders() {
     }
 
     // ==================== ACTIONS ====================
-    async function toggleOnline() {
-        if (!FCMModule.token && Notification.permission === 'default') {
-     setupDriverPushNotifications();
-}
+async function toggleOnline() {
+    try {
+        if (typeof FCMModule !== 'undefined' && !FCMModule.token && Notification.permission === 'default') {
+            setupDriverPushNotifications().catch(() => {});
+        }
+    } catch(e) {}
         isOnline = !isOnline;
         document.getElementById('onlineToggle').classList.toggle('active', isOnline);
         document.getElementById('statusText').textContent = isOnline ? 'Online' : 'Offline';
