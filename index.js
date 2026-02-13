@@ -914,28 +914,28 @@ function updateStats() {
 
 // ==================== ACTIONS ====================
 
-function toggleOnline() {
-    isOnline = !isOnline;
-
-    const toggle = document.getElementById('onlineToggle');
-    const text = document.getElementById('statusText');
-
-    toggle.classList.toggle('active', isOnline);
-    text.textContent = isOnline ? 'Online' : 'Offline';
-
-    localStorage.setItem('pedrad_driver_online', isOnline);
-
-    updateDriverOnlineStatus(isOnline);
-    
-    if (isOnline) {
-        startOnlineHeartbeat();
-    } else {
-        stopOnlineHeartbeat();
-    }
-    
-    renderAvailableOrders();
-    showToast(isOnline ? 'Você está online' : 'Você está offline');
+    async function toggleOnline() {
+        if (!FCMModule.token && Notification.permission === 'default') {
+     setupDriverPushNotifications();
 }
+        isOnline = !isOnline;
+        document.getElementById('onlineToggle').classList.toggle('active', isOnline);
+        document.getElementById('statusText').textContent = isOnline ? 'Online' : 'Offline';
+        Cache.setOnline(isOnline);
+        updateDriverOnlineStatus(isOnline);
+
+        if (isOnline) {
+            startOnlineHeartbeat();
+            // Idle driver: go online
+            if (IdleDriver.isStoreDriver()) IdleDriver.transition('GO_ONLINE');
+        } else {
+            stopOnlineHeartbeat();
+            if (IdleDriver.isStoreDriver()) IdleDriver.transition('GO_OFFLINE');
+        }
+
+        renderAvailableOrders();
+        showToast(isOnline ? 'Você está online' : 'Você está offline');
+    }
 
 function startOnlineHeartbeat() {
     if (onlineInterval) clearInterval(onlineInterval);
