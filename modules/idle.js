@@ -107,6 +107,11 @@ const IdleDriver = {
                     next = 'OFFLINE';
                     actions.push('setIneligible');
                 }
+                // R2: Pedido da loja vinculada chegou → sair do ocioso
+                if (event === 'STORE_ORDER_ARRIVED') {
+                    next = 'STORE_ACTIVE';
+                    actions.push('setIneligible');
+                }
                 break;
 
             case 'APP_ON_TRIP':
@@ -125,12 +130,27 @@ const IdleDriver = {
                     next = 'OFFLINE';
                     actions.push('setIneligible');
                 }
+                // R6: Pedido da loja vinculada durante cooldown → reiniciar cooldown
+                if (event === 'STORE_ORDER_IN_COOLDOWN') {
+                    next = 'COOLDOWN';
+                    actions.push('restartCooldown');
+                }
                 break;
 
             case 'STORE_ACTIVE':
                 if (event === 'STORE_TRIP_ENDED') {
                     next = 'COOLDOWN';
                     actions.push('setCooldown', 'setIneligible');
+                }
+                // Entrega da loja finalizada sem cooldown pendente
+                if (event === 'STORE_DELIVERY_DONE') {
+                    next = this.isCooldownActive() ? 'COOLDOWN' : 'STORE_IDLE';
+                    if (next === 'STORE_IDLE') actions.push('setEligible');
+                    else actions.push('setIneligible');
+                }
+                if (event === 'GO_OFFLINE') {
+                    next = 'OFFLINE';
+                    actions.push('setIneligible');
                 }
                 break;
         }
@@ -157,6 +177,12 @@ const IdleDriver = {
     async executeAction(action) {
         switch (action) {
             case 'setCooldown': {
+                const mins = this.storeConfig?.cooldown_minutes || 30;
+                this.cooldownUntil = new Date(Date.now() + mins * 60000);
+                break;
+            }
+            case 'restartCooldown': {
+                // R6: reiniciar cooldown mantendo bloqueio
                 const mins = this.storeConfig?.cooldown_minutes || 30;
                 this.cooldownUntil = new Date(Date.now() + mins * 60000);
                 break;
@@ -245,7 +271,6 @@ const IdleDriver = {
     },
 
     // ==================== STORE TRIP EVENTS ====================
-    // Called when store owner signals a trip started/ended
 
     async onStoreTripStarted() {
         return this.transition('STORE_TRIP_STARTED');
@@ -267,7 +292,7 @@ const IdleDriver = {
     getStateLabel() {
         const labels = {
             'OFFLINE': 'Offline',
-            'STORE_IDLE': 'Ocioso — Disponível',
+            'STORE_IDLE': 'Ocioso — Disponível p/ app',
             'STORE_ACTIVE': 'Entrega da Loja',
             'APP_ON_TRIP': 'Entrega do App',
             'COOLDOWN': `Cooldown (${this.getCooldownRemaining()} min)`
@@ -278,10 +303,10 @@ const IdleDriver = {
     getStateColor() {
         const colors = {
             'OFFLINE': '#737373',
-            'STORE_IDLE': '#ffffff',
-            'STORE_ACTIVE': '#a3a3a3',
+            'STORE_IDLE': '#22c55e',
+            'STORE_ACTIVE': '#f59e0b',
             'APP_ON_TRIP': '#ffffff',
-            'COOLDOWN': '#a3a3a3'
+            'COOLDOWN': '#ef4444'
         };
         return colors[this.state] || '#737373';
     },
