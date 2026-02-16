@@ -309,6 +309,16 @@
                 availableOrders = snapshot.docs
                     .map(doc => ({ id: doc.id, ...doc.data() }))
                     .filter(o => !o.driverId && o.deliveryMode !== 'pickup');
+
+                // R2: Auto-exit idle when own store order arrives
+                if (IdleDriver.isStoreDriver() && IdleDriver.state === 'STORE_IDLE') {
+                    const hasOwnStoreOrder = availableOrders.some(o => o.storeId === driverData.storeId);
+                    if (hasOwnStoreOrder) {
+                        IdleDriver.transition('STORE_ORDER_ARRIVED');
+                        showToast('Pedido da sua loja — saindo do modo ocioso');
+                    }
+                }
+
                 renderAvailableOrders();
 
                 if (availableOrders.length > prev && isOnline && !currentDelivery) {
@@ -367,10 +377,19 @@
 function renderAvailableOrders() {
     const container = document.getElementById('availableDeliveries');
 
-    // Store driver: só vê pedidos da própria loja
+    // R1/R2/R5: Filtragem baseada no estado do entregador
     let filtered = availableOrders;
     if (driverData?.driverType === 'store' && driverData?.storeId) {
-        filtered = availableOrders.filter(o => o.storeId === driverData.storeId);
+        const ownStoreOrders = availableOrders.filter(o => o.storeId === driverData.storeId);
+        // R2: Ocioso SEM pedidos da própria loja → vê tudo
+        const isIdleAndFree = IdleDriver.state === 'STORE_IDLE' && ownStoreOrders.length === 0;
+
+        if (isIdleAndFree) {
+            filtered = availableOrders; // modo ocioso: todas as entregas
+        } else {
+            // R1/R5: normal, cooldown, ou loja tem pedidos → só da própria loja
+            filtered = ownStoreOrders;
+        }
     }
 
     document.getElementById('availableCount').textContent = filtered.length;
@@ -685,19 +704,20 @@ async function toggleOnline() {
     }
 
     async function confirmAccept() {
-            if (!pendingAcceptOrder || !driverData) return;
-
-    // Store driver: bloqueia pedidos de outras lojas
-    if (driverData.driverType === 'store' && driverData.storeId && pendingAcceptOrder.storeId !== driverData.storeId) {
-        closeModal('acceptModal');
-        showToast('Você só pode aceitar entregas da sua loja');
-        return;
-    }
-
-    const maxOrders = driverData.maxSimultaneousOrders || 1;
         if (!pendingAcceptOrder || !driverData) return;
 
-       
+        const isStoreDriver = driverData.driverType === 'store' && driverData.storeId;
+        const isOwnStore = isStoreDriver && pendingAcceptOrder.storeId === driverData.storeId;
+        const isOtherStore = isStoreDriver && !isOwnStore;
+
+        // R1/R5: Bloqueia outras lojas EXCETO se ocioso (STORE_IDLE)
+        if (isOtherStore && IdleDriver.state !== 'STORE_IDLE') {
+            closeModal('acceptModal');
+            showToast('Você só pode aceitar entregas da sua loja');
+            return;
+        }
+
+        const maxOrders = driverData.maxSimultaneousOrders || 1;
         const myActive = acceptedOrders.length + (currentDelivery ? 1 : 0);
         if (myActive >= maxOrders) {
             closeModal('acceptModal');
@@ -726,9 +746,18 @@ async function toggleOnline() {
                 acceptedAt: firebase.firestore.FieldValue.serverTimestamp()
             });
 
-            // Idle driver: mark as on app trip
+            // Idle state transitions baseadas no contexto
             if (IdleDriver.isStoreDriver()) {
-                IdleDriver.transition('APP_TRIP_ASSIGNED');
+                if (isOtherStore) {
+                    // Aceitou entrega de outra loja (estava ocioso)
+                    IdleDriver.transition('APP_TRIP_ASSIGNED');
+                } else if (isOwnStore && IdleDriver.state === 'COOLDOWN') {
+                    // R6: Pedido da própria loja durante cooldown → reiniciar cooldown
+                    IdleDriver.transition('STORE_ORDER_IN_COOLDOWN');
+                } else if (isOwnStore && IdleDriver.state === 'STORE_IDLE') {
+                    // R2: Pedido da própria loja enquanto ocioso → sair do ocioso
+                    IdleDriver.transition('STORE_ORDER_ARRIVED');
+                }
             }
 
             closeModal('acceptModal');
@@ -849,8 +878,14 @@ async function confirmDelivery() {
             });
         }
 
+        // Transição idle baseada no tipo de entrega
         if (IdleDriver.isStoreDriver()) {
-            IdleDriver.transition('APP_TRIP_ENDED');
+            const wasOwnStore = deliveryRef.storeId === driverData.storeId;
+            if (wasOwnStore) {
+                IdleDriver.transition('STORE_DELIVERY_DONE');
+            } else {
+                IdleDriver.transition('APP_TRIP_ENDED');
+            }
         }
 
         Cache.remove('history');
