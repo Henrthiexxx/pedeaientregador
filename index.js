@@ -461,76 +461,40 @@ async function getStoreData(storeId) {
 // ==================== REAL-TIME ====================
 
 function setupRealtimeListeners() {
-    db.collection('orders')
-        .where('status', 'in', ['preparing', 'ready'])
-        .onSnapshot(snapshot => {
-            const prevCount = availableOrders.length;
-            availableOrders = snapshot.docs
-                .map(doc => ({ id: doc.id, ...doc.data() }))
-                .filter(o => !o.driverId);
+   // Available orders (FAST: docChanges + 1 render por frame)
+let availMap = new Map();
+let rafAvail = null;
 
-            renderAvailableOrders();
-
-            if (availableOrders.length > prevCount && isOnline && !currentDelivery) {
-                playNotificationSound();
-                showToast('Nova entrega disponível');
-            }
-        });
-
-    if (driverData) {
-        db.collection('orders')
-            .where('driverId', '==', driverData.id)
-            .onSnapshot(snapshot => {
-                const myOrders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                
-                acceptedOrders = myOrders.filter(o => o.status === 'ready');
-                renderAcceptedOrders();
-                
-                const delivering = myOrders.find(o => o.status === 'delivering');
-                if (delivering) {
-                    const wasDelivering = !!currentDelivery;
-                    currentDelivery = delivering;
-                    renderCurrentDelivery();
-                    
-                    if (!wasDelivering) {
-                        startLocationTracking();
-                    }
-                } else {
-                    if (currentDelivery) {
-                        stopLocationTracking();
-                    }
-                    currentDelivery = null;
-                    document.getElementById('currentDeliverySection').style.display = 'none';
-                }
-
-                loadAllHistory();
-                updateStats();
-            });
-
-        db.collection('drivers').doc(driverData.id).onSnapshot(doc => {
-            if (doc.exists) {
-                const oldRating = driverData.rating;
-                driverData = { id: doc.id, ...doc.data() };
-                updateDriverUI();
-
-                if (driverData.status === 'blocked') {
-                    showToast('Sua conta foi bloqueada');
-                    handleLogout();
-                }
-
-                if (oldRating && driverData.rating && driverData.rating !== oldRating) {
-                    const diff = (driverData.rating - oldRating).toFixed(1);
-                    const symbol = diff > 0 ? '↑' : '↓';
-                    showToast(`${symbol} Avaliação: ${driverData.rating.toFixed(1)}`);
-                }
-            }
-        });
-    }
-
-    db.collection('deliveryFees').where('active', '==', true).onSnapshot(snapshot => {
-        deliveryFees = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    });
+function scheduleAvailRender() {
+  if (rafAvail) return;
+  rafAvail = requestAnimationFrame(() => {
+    rafAvail = null;
+    renderAvailableOrders();
+  });
 }
+
+db.collection('orders')
+  .where('status', 'in', ['confirmed','preparing','ready'])
+  .onSnapshot((snapshot) => {
+    const had = availableOrders.length;
+
+    snapshot.docChanges().forEach((change) => {
+      const o = { id: change.doc.id, ...change.doc.data() };
+      if (change.type === 'removed') availMap.delete(o.id);
+      else availMap.set(o.id, o);
+    });
+
+    availableOrders = [...availMap.values()]
+      .filter(o => !o.driverId && o.deliveryMode !== 'pickup');
+
+    scheduleAvailRender();
+
+    const hasNew = snapshot.docChanges().some(c => c.type === 'added');
+    if (hasNew && isOnline && !currentDelivery) {
+      playNotificationSound();
+      showToast('Nova entrega disponível');
+    }
+  });
 
 function playNotificationSound() {
     try {
