@@ -6,6 +6,34 @@
     <title>Pedrad - Perfil</title>
     <meta name="theme-color" content="#000000">
     <link rel="stylesheet" href="index.css">
+    <style>
+    .collapsible-section { padding: 0 14px 14px; }
+    .section-form { display: flex; flex-direction: column; gap: 12px; }
+    .form-label-sm { font-size: .72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .8px; }
+    .form-input-sm {
+        width: 100%; padding: 12px; border-radius: 8px;
+        border: 1px solid var(--border); background: var(--bg-input);
+        color: var(--text); font-size: .9rem;
+    }
+    .form-input-sm:focus { outline: none; border-color: var(--primary); }
+    .btn-action {
+        width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border);
+        background: var(--bg-input); color: var(--text); font-size: .82rem;
+        font-weight: 600; cursor: pointer; text-transform: uppercase; letter-spacing: 1px;
+        transition: all .2s;
+    }
+    .btn-action:hover { background: var(--primary); color: #000; border-color: var(--primary); }
+    .token-display {
+        display: flex; align-items: center; gap: 10px;
+        background: var(--bg-input); border: 1px solid var(--border);
+        border-radius: 10px; padding: 12px 14px; margin: 0 14px 14px;
+    }
+    .token-code {
+        font-family: 'Courier New', monospace; font-size: 1.2rem;
+        font-weight: 800; letter-spacing: 3px; color: var(--primary);
+    }
+    .token-label { font-size: .72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+    </style>
 </head>
 <body>
     <div class="toast" id="toast"></div>
@@ -16,14 +44,12 @@
     </header>
 
     <div class="page active">
-        <!-- Profile Header -->
         <div class="profile-header">
             <div class="profile-avatar" id="profileAvatar" onclick="triggerPhotoUpload()">—</div>
             <div class="profile-name" id="profileName">Entregador</div>
             <div class="profile-email" id="profileEmail">-</div>
         </div>
 
-        <!-- Stats -->
         <div class="profile-stats">
             <div class="stat-card">
                 <div class="stat-value" id="totalDeliveries">0</div>
@@ -35,129 +61,63 @@
             </div>
         </div>
 
-        <!-- Info -->
         <div class="profile-section">
             <div class="profile-section-title">Informações</div>
-            <div class="profile-item">
-                <span class="profile-item-icon">☎</span>
-                <span class="profile-item-label">Telefone</span>
-                <span class="profile-item-value" id="profilePhone">-</span>
-            </div>
-            <div class="profile-item">
-                <span class="profile-item-icon">◎</span>
-                <span class="profile-item-label">Veículo</span>
-                <span class="profile-item-value" id="profileVehicle">-</span>
-            </div>
-            <div class="profile-item">
-                <span class="profile-item-icon">#</span>
-                <span class="profile-item-label">Placa</span>
-                <span class="profile-item-value" id="profilePlate">-</span>
-            </div>
-            <div class="profile-item">
-                <span class="profile-item-icon">≡</span>
-                <span class="profile-item-label">Max. simultâneas</span>
-                <span class="profile-item-value" id="profileMaxOrders">1</span>
+            <div class="profile-item"><span class="profile-item-icon">☎</span><span class="profile-item-label">Telefone</span><span class="profile-item-value" id="profilePhone">-</span></div>
+            <div class="profile-item"><span class="profile-item-icon">◎</span><span class="profile-item-label">Veículo</span><span class="profile-item-value" id="profileVehicle">-</span></div>
+            <div class="profile-item"><span class="profile-item-icon">#</span><span class="profile-item-label">Placa</span><span class="profile-item-value" id="profilePlate">-</span></div>
+            <div class="profile-item"><span class="profile-item-icon">≡</span><span class="profile-item-label">Max. simultâneas</span><span class="profile-item-value" id="profileMaxOrders">1</span></div>
+        </div>
+
+        <!-- Token -->
+        <div class="profile-section">
+            <div class="profile-section-title">🔑 Token de Identificação</div>
+            <div class="token-display">
+                <div>
+                    <div class="token-label">Seu token</div>
+                    <div class="token-code" id="profileToken">-</div>
+                </div>
             </div>
         </div>
 
-        <!-- Idle Driver Section (only for store drivers) -->
+        <!-- Idle Driver Section -->
         <div class="profile-section" id="idleDriverSection" style="display:none;">
             <div class="profile-section-title">Entregador de Loja</div>
-            <div class="profile-item">
-                <span class="profile-item-icon">◉</span>
-                <span class="profile-item-label">Status Ocioso</span>
-                <span class="profile-item-value" id="idleStateLabel">-</span>
-            </div>
-            <div class="profile-item">
-                <span class="profile-item-icon">⟳</span>
-                <span class="profile-item-label">Cooldown</span>
-                <span class="profile-item-value" id="idleCooldownLabel">-</span>
-            </div>
-            <div class="profile-item">
-                <span class="profile-item-icon">□</span>
-                <span class="profile-item-label">Loja vinculada</span>
-                <span class="profile-item-value" id="idleStoreName">-</span>
-            </div>
-            <div class="profile-menu-item" onclick="toggleIdleAvailability()">
-                <span class="profile-menu-icon">⚡</span>
-                <span class="profile-menu-text" id="idleToggleText">Disponível para entregas do app</span>
-                <span class="profile-menu-arrow">›</span>
-            </div>
+            <div class="profile-item"><span class="profile-item-icon">◉</span><span class="profile-item-label">Status Ocioso</span><span class="profile-item-value" id="idleStateLabel">-</span></div>
+            <div class="profile-item"><span class="profile-item-icon">⟳</span><span class="profile-item-label">Cooldown</span><span class="profile-item-value" id="idleCooldownLabel">-</span></div>
+            <div class="profile-item"><span class="profile-item-icon">□</span><span class="profile-item-label">Loja vinculada</span><span class="profile-item-value" id="idleStoreName">-</span></div>
+            <div class="profile-menu-item" onclick="toggleIdleAvailability()"><span class="profile-menu-icon">⚡</span><span class="profile-menu-text" id="idleToggleText">Disponível para entregas do app</span><span class="profile-menu-arrow">›</span></div>
         </div>
 
         <!-- Account -->
         <div class="profile-section">
             <div class="profile-section-title">Conta</div>
-            <div class="profile-menu-item" onclick="navigateTo('earnings.html')">
-                <span class="profile-menu-icon">$</span>
-                <span class="profile-menu-text">Ganhos e Pagamentos</span>
-                <span class="profile-menu-arrow">›</span>
-            </div>
-            <div class="profile-menu-item" onclick="requestNotificationPermission()">
-                <span class="profile-menu-icon">🔔</span>
-                <span class="profile-menu-text">Ativar Notificações</span>
-                <span class="profile-menu-arrow">›</span>
-            </div>
-            <div class="profile-menu-item" onclick="requestLocationPermission()">
-                <span class="profile-menu-icon">◉</span>
-                <span class="profile-menu-text">Permissão de Localização</span>
-                <span class="profile-menu-arrow">›</span>
-            </div>
-            <div class="profile-menu-item" onclick="triggerPhotoUpload()">
-                <span class="profile-menu-icon">📷</span>
-                <span class="profile-menu-text">Alterar Foto</span>
-                <span class="profile-menu-arrow">›</span>
-            </div>
-            <div class="profile-menu-item" onclick="openSoundPicker()">
-    <span class="profile-menu-icon">🔔</span>
-    <span class="profile-menu-text">Som de Notificação</span>
-    <span class="profile-menu-arrow">›</span>
-</div>
-<div class="profile-menu-item" onclick="resetSoundToDefault()">
-    <span class="profile-menu-icon">↺</span>
-    <span class="profile-menu-text">Restaurar Som Padrão</span>
-</div>
-            <div class="profile-menu-item logout" onclick="handleLogout()">
-                <span class="profile-menu-icon">→</span>
-                <span class="profile-menu-text">Sair</span>
-                <span class="profile-menu-arrow">›</span>
+            <div class="profile-menu-item" onclick="navigateTo('earnings.html')"><span class="profile-menu-icon">$</span><span class="profile-menu-text">Ganhos e Pagamentos</span><span class="profile-menu-arrow">›</span></div>
+            <div class="profile-menu-item" onclick="requestNotificationPermission()"><span class="profile-menu-icon">🔔</span><span class="profile-menu-text">Ativar Notificações</span><span class="profile-menu-arrow">›</span></div>
+            <div class="profile-menu-item" onclick="requestLocationPermission()"><span class="profile-menu-icon">◉</span><span class="profile-menu-text">Permissão de Localização</span><span class="profile-menu-arrow">›</span></div>
+            <div class="profile-menu-item" onclick="triggerPhotoUpload()"><span class="profile-menu-icon">📷</span><span class="profile-menu-text">Alterar Foto</span><span class="profile-menu-arrow">›</span></div>
+            <div class="profile-menu-item" onclick="openSoundPicker()"><span class="profile-menu-icon">🔔</span><span class="profile-menu-text">Som de Notificação</span><span class="profile-menu-arrow">›</span></div>
+            <div class="profile-menu-item" onclick="resetSoundToDefault()"><span class="profile-menu-icon">↺</span><span class="profile-menu-text">Restaurar Som Padrão</span></div>
+            <div class="profile-menu-item logout" onclick="handleLogout()"><span class="profile-menu-icon">→</span><span class="profile-menu-text">Sair</span><span class="profile-menu-arrow">›</span></div>
+        </div>
+
+        <!-- Security -->
+        <div class="profile-section" id="securitySection">
+            <div class="profile-section-title">🔐 Segurança</div>
+            <div class="profile-item" id="emailStatusItem"><span class="profile-item-icon">📧</span><span class="profile-item-label">E-mail</span><span class="profile-item-value" id="emailStatusValue">-</span></div>
+            <div class="profile-menu-item" onclick="toggleSection('changeEmailSection')"><span class="profile-menu-icon">✏️</span><span class="profile-menu-text">Alterar E-mail</span><span class="profile-menu-arrow">›</span></div>
+            <div id="changeEmailSection" class="collapsible-section" style="display:none;">
+                <div class="section-form">
+                    <div style="margin-bottom:10px;"><label class="form-label-sm">Novo e-mail</label><input type="email" class="form-input-sm" id="newEmailInput" placeholder="novo@email.com"></div>
+                    <div style="margin-bottom:10px;"><label class="form-label-sm">Senha atual (confirmação)</label><input type="password" class="form-input-sm" id="emailConfirmPassword" placeholder="Sua senha"></div>
+                    <button class="btn-action" onclick="handleChangeEmail()">Alterar E-mail</button>
+                </div>
             </div>
         </div>
     </div>
 
     <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none" onchange="handlePhotoUpload(event)">
-<!-- ====== BLOCO 2: Seção "Segurança" (inserir APÓS a seção "Conta") ====== -->
 
-<div class="profile-section" id="securitySection">
-    <div class="profile-section-title">🔐 Segurança</div>
-    
-    <!-- Email verification status -->
-    <div class="profile-item" id="emailStatusItem">
-        <span class="profile-item-icon">📧</span>
-        <span class="profile-item-label">E-mail</span>
-        <span class="profile-item-value" id="emailStatusValue">-</span>
-    </div>
-
-    <!-- Change Email -->
-    <div class="profile-menu-item" onclick="toggleSection('changeEmailSection')">
-        <span class="profile-menu-icon">✏️</span>
-        <span class="profile-menu-text">Alterar E-mail</span>
-        <span class="profile-menu-arrow">›</span>
-    </div>
-    <div id="changeEmailSection" class="collapsible-section" style="display:none;">
-        <div class="section-form">
-            <div class="form-group">
-                <label class="form-label-sm">Novo e-mail</label>
-                <input type="email" class="form-input-sm" id="newEmailInput" placeholder="novo@email.com">
-            </div>
-            <div class="form-group">
-                <label class="form-label-sm">Senha atual (confirmação)</label>
-                <input type="password" class="form-input-sm" id="emailConfirmPassword" placeholder="Sua senha">
-            </div>
-            <button class="btn-action" onclick="handleChangeEmail()">Alterar E-mail</button>
-        </div>
-    </div>
-    <!-- Confirm Modal -->
     <div class="modal" id="confirmModal">
         <div class="modal-content">
             <div class="modal-title" id="confirmModalTitle">Confirmar</div>
@@ -180,14 +140,14 @@
     <script src="modules/idle.js"></script>
     <script src="modules/fcm.js"></script>
     <script>
+    // ==================== INIT ====================
     document.addEventListener('DOMContentLoaded', async () => {
         const ok = await checkAuth();
         if (!ok) return;
-
         renderBottomNav('profile.html');
+        await ensureDriverToken();
         updateProfileUI();
 
-        // Idle driver section
         if (driverData.driverType === 'store' && driverData.storeId) {
             document.getElementById('idleDriverSection').style.display = 'block';
             await IdleDriver.init();
@@ -196,16 +156,37 @@
             loadStoreName();
         }
 
-        // Listen for driver changes
         setupDriverListener((newData) => {
             updateProfileUI();
             if (IdleDriver.isStoreDriver()) updateIdleSection();
         });
     });
 
+    // ==================== TOKEN ====================
+    function generateDriverToken() {
+        const L = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', D = '0123456789';
+        let t = '';
+        for (let i = 0; i < 3; i++) t += L[Math.floor(Math.random() * 26)];
+        for (let i = 0; i < 3; i++) t += D[Math.floor(Math.random() * 10)];
+        return t;
+    }
+
+    async function ensureDriverToken() {
+        if (!driverData || driverData.driverToken) return;
+        const token = generateDriverToken();
+        try {
+            await db.collection('drivers').doc(driverData.id).update({
+                driverToken: token,
+                tokenCreatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            driverData.driverToken = token;
+            Cache.setDriver(driverData);
+        } catch (e) { console.error('Token error:', e); }
+    }
+
+    // ==================== UI ====================
     function updateProfileUI() {
         if (!driverData) return;
-
         document.getElementById('profileName').textContent = driverData.name || 'Entregador';
         document.getElementById('profileEmail').textContent = driverData.email || '-';
         document.getElementById('profilePhone').textContent = driverData.phone || '-';
@@ -214,6 +195,8 @@
         document.getElementById('profileMaxOrders').textContent = driverData.maxSimultaneousOrders || 1;
         document.getElementById('profileRating').textContent = (driverData.rating || 5.0).toFixed(1);
         document.getElementById('totalDeliveries').textContent = driverData.totalDeliveries || 0;
+        document.getElementById('profileToken').textContent = driverData.driverToken || '-';
+        document.getElementById('emailStatusValue').textContent = driverData.email || '-';
 
         const avatar = document.getElementById('profileAvatar');
         if (driverData.photoUrl) {
@@ -230,78 +213,88 @@
     async function loadStoreName() {
         if (!driverData?.storeId) return;
         const store = await getStoreData(driverData.storeId);
-        if (store) {
-            document.getElementById('idleStoreName').textContent = store.name || store.storeName || '-';
-        }
+        if (store) document.getElementById('idleStoreName').textContent = store.name || store.storeName || '-';
     }
 
     function updateIdleSection() {
         document.getElementById('idleStateLabel').textContent = IdleDriver.getStateLabel();
-
-        const cooldown = IdleDriver.getCooldownRemaining();
-        document.getElementById('idleCooldownLabel').textContent = cooldown > 0 ? `${cooldown} min restantes` : 'Sem cooldown';
-
-        const toggleText = document.getElementById('idleToggleText');
-        if (IdleDriver.state === 'STORE_IDLE') {
-            toggleText.textContent = 'Pausar disponibilidade';
-        } else if (IdleDriver.state === 'OFFLINE') {
-            toggleText.textContent = 'Ativar disponibilidade p/ app';
-        } else {
-            toggleText.textContent = 'Disponibilidade: ' + IdleDriver.getStateLabel();
-        }
+        const cd = IdleDriver.getCooldownRemaining();
+        document.getElementById('idleCooldownLabel').textContent = cd > 0 ? cd + ' min restantes' : 'Sem cooldown';
+        const t = document.getElementById('idleToggleText');
+        if (IdleDriver.state === 'STORE_IDLE') t.textContent = 'Pausar disponibilidade';
+        else if (IdleDriver.state === 'OFFLINE') t.textContent = 'Ativar disponibilidade p/ app';
+        else t.textContent = 'Disponibilidade: ' + IdleDriver.getStateLabel();
     }
 
     function toggleIdleAvailability() {
-        if (IdleDriver.state === 'STORE_IDLE') {
-            IdleDriver.transition('GO_OFFLINE');
-            showToast('Disponibilidade pausada');
-        } else if (IdleDriver.state === 'OFFLINE') {
-            IdleDriver.transition('GO_ONLINE');
-            showToast('Disponível para entregas do app');
-        } else {
-            showToast('Não é possível alterar agora: ' + IdleDriver.getStateLabel());
-        }
+        if (IdleDriver.state === 'STORE_IDLE') { IdleDriver.transition('GO_OFFLINE'); showToast('Disponibilidade pausada'); }
+        else if (IdleDriver.state === 'OFFLINE') { IdleDriver.transition('GO_ONLINE'); showToast('Disponível para entregas do app'); }
+        else showToast('Não é possível alterar agora: ' + IdleDriver.getStateLabel());
     }
 
-    // ==================== PHOTO UPLOAD ====================
-    function triggerPhotoUpload() {
-        document.getElementById('photoInput').click();
+    // ==================== SECTIONS ====================
+    function toggleSection(id) {
+        const el = document.getElementById(id);
+        if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
     }
+
+    async function handleChangeEmail() {
+        const newEmail = (document.getElementById('newEmailInput').value || '').trim().toLowerCase();
+        const password = document.getElementById('emailConfirmPassword').value;
+        if (!newEmail) { showToast('Digite o novo e-mail'); return; }
+        if (!password) { showToast('Digite sua senha'); return; }
+        if (password !== driverData.password) { showToast('Senha incorreta'); return; }
+        try {
+            await db.collection('drivers').doc(driverData.id).update({ email: newEmail, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+            driverData.email = newEmail;
+            Cache.setDriver(driverData);
+            updateProfileUI();
+            toggleSection('changeEmailSection');
+            document.getElementById('newEmailInput').value = '';
+            document.getElementById('emailConfirmPassword').value = '';
+            showToast('E-mail alterado');
+        } catch (e) { showToast('Erro ao alterar e-mail'); }
+    }
+
+    // ==================== SOUND ====================
+    function openSoundPicker() {
+        const input = document.createElement('input');
+        input.type = 'file'; input.accept = 'audio/*';
+        input.onchange = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            if (file.size > 1024 * 1024) { showToast('Max 1MB'); return; }
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                localStorage.setItem('pedrad_notify_sound', ev.target.result);
+                showToast('Som salvo');
+                new Audio(ev.target.result).play().catch(() => {});
+            };
+            reader.readAsDataURL(file);
+        };
+        input.click();
+    }
+
+    function resetSoundToDefault() {
+        localStorage.removeItem('pedrad_notify_sound');
+        showToast('Som restaurado');
+    }
+
+    // ==================== PHOTO ====================
+    function triggerPhotoUpload() { document.getElementById('photoInput').click(); }
 
     async function handlePhotoUpload(event) {
         const file = event.target.files[0];
         if (!file) return;
-
-        if (!file.type.startsWith('image/')) {
-            showToast('Selecione uma imagem');
-            return;
-        }
-        if (file.size > 5 * 1024 * 1024) {
-            showToast('Imagem muito grande (max 5MB)');
-            return;
-        }
-
-        showToast('Processando foto...');
-
+        if (!file.type.startsWith('image/')) { showToast('Selecione uma imagem'); return; }
+        if (file.size > 5 * 1024 * 1024) { showToast('Max 5MB'); return; }
+        showToast('Processando...');
         try {
-            // Compress image before saving
-            const compressed = await compressImage(file, 400, 0.7);
-
-            await db.collection('drivers').doc(driverData.id).update({
-                photoUrl: compressed,
-                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            });
-
-            driverData.photoUrl = compressed;
-            Cache.setDriver(driverData);
-            updateProfileUI();
+            const c = await compressImage(file, 400, 0.7);
+            await db.collection('drivers').doc(driverData.id).update({ photoUrl: c, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+            driverData.photoUrl = c; Cache.setDriver(driverData); updateProfileUI();
             showToast('Foto atualizada');
-        } catch (e) {
-            console.error('Error uploading photo:', e);
-            showToast('Erro ao enviar foto');
-        }
-
-        // Reset input
+        } catch (e) { showToast('Erro ao enviar foto'); }
         event.target.value = '';
     }
 
@@ -313,70 +306,40 @@
                 img.onload = () => {
                     const canvas = document.createElement('canvas');
                     let w = img.width, h = img.height;
-
                     if (w > maxSize || h > maxSize) {
                         if (w > h) { h = Math.round(h * maxSize / w); w = maxSize; }
                         else { w = Math.round(w * maxSize / h); h = maxSize; }
                     }
-
-                    canvas.width = w;
-                    canvas.height = h;
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(img, 0, 0, w, h);
+                    canvas.width = w; canvas.height = h;
+                    canvas.getContext('2d').drawImage(img, 0, 0, w, h);
                     resolve(canvas.toDataURL('image/jpeg', quality));
                 };
-                img.onerror = reject;
-                img.src = e.target.result;
+                img.onerror = reject; img.src = e.target.result;
             };
-            reader.onerror = reject;
-            reader.readAsDataURL(file);
+            reader.onerror = reject; reader.readAsDataURL(file);
         });
     }
 
-    // ==================== NOTIFICATIONS ====================
+    // ==================== OTHER ====================
     async function requestNotificationPermission() {
         if (!driverData) return;
-
-        if (Notification.permission === 'granted') {
-            showToast('Notificações já estão ativas');
-            await setupDriverPushNotifications();
-            return;
-        }
-        if (Notification.permission === 'denied') {
-            showToast('Notificações bloqueadas. Libere nas configurações do navegador.');
-            return;
-        }
-
+        if (Notification.permission === 'granted') { showToast('Notificações já ativas'); await setupDriverPushNotifications(); return; }
+        if (Notification.permission === 'denied') { showToast('Bloqueadas. Libere nas configurações.'); return; }
         await setupDriverPushNotifications();
         if (Notification.permission === 'granted') showToast('Notificações ativadas!');
     }
 
     function requestLocationPermission() {
-        if (!navigator.geolocation) {
-            showToast('GPS não disponível');
-            return;
-        }
+        if (!navigator.geolocation) { showToast('GPS não disponível'); return; }
         navigator.geolocation.getCurrentPosition(
             () => showToast('Permissão concedida'),
-            (e) => {
-                if (e.code === 1) showToast('Permissão negada - Ative nas configurações');
-                else showToast('Erro ao obter permissão');
-            }
+            (e) => showToast(e.code === 1 ? 'Negada - Ative nas configurações' : 'Erro')
         );
     }
 
-    // ==================== LOGOUT ====================
     function handleLogout() {
-        showConfirmModal('Deseja sair?', 'Você será desconectado do aplicativo.', async () => {
-            try {
-                if (driverData) {
-                    await db.collection('drivers').doc(driverData.id).update({
-                        online: false,
-                        lastOnlineAt: firebase.firestore.FieldValue.serverTimestamp()
-                    });
-                }
-            } catch (e) {}
-
+        showConfirmModal('Deseja sair?', 'Você será desconectado.', async () => {
+            try { if (driverData) await db.collection('drivers').doc(driverData.id).update({ online: false, lastOnlineAt: firebase.firestore.FieldValue.serverTimestamp() }); } catch (e) {}
             Cache.clearAll();
             window.location.href = 'index.html';
         });
