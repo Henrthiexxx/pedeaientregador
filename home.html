@@ -243,17 +243,30 @@
         updateStats();
     }
 
-    async function loadAvailableOrders() {
-        try {
-            const snapshot = await db.collection('orders')
+async function loadAvailableOrders() {
+    try {
+        const isStoreDriver = driverData?.driverType === 'store' && driverData?.storeId;
+        let snapshot;
+
+        if (isStoreDriver && !driverData.appEligible) {
+            // Query restrita: só pedidos da própria loja
+            snapshot = await db.collection('orders')
+                .where('status', 'in', ['preparing', 'ready'])
+                .where('storeId', '==', driverData.storeId)
+                .get();
+        } else {
+            // Query geral: appEligible ou regular driver
+            snapshot = await db.collection('orders')
                 .where('status', 'in', ['preparing', 'ready'])
                 .get();
-            availableOrders = snapshot.docs
-                .map(doc => ({ id: doc.id, ...doc.data() }))
-                .filter(o => !o.driverId && o.deliveryMode !== 'pickup');
-            renderAvailableOrders();
-        } catch (e) { console.error('Error loading orders:', e); }
-    }
+        }
+
+        availableOrders = snapshot.docs
+            .map(doc => ({ id: doc.id, ...doc.data() }))
+            .filter(o => !o.driverId && o.deliveryMode !== 'pickup');
+        renderAvailableOrders();
+    } catch (e) { console.error('Error loading orders:', e); }
+}
 
     async function loadMyOrders() {
         if (!driverData) return;
