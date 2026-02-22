@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+html = r"""<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
@@ -243,30 +243,30 @@
         updateStats();
     }
 
-async function loadAvailableOrders() {
-    try {
-        const isStoreDriver = driverData?.driverType === 'store' && driverData?.storeId;
-        let snapshot;
+    async function loadAvailableOrders() {
+        try {
+            const isStoreDriver = driverData?.driverType === 'store' && driverData?.storeId;
+            let snapshot;
 
-        if (isStoreDriver && !driverData.appEligible) {
-            // Query restrita: só pedidos da própria loja
-            snapshot = await db.collection('orders')
-                .where('status', 'in', ['preparing', 'ready'])
-                .where('storeId', '==', driverData.storeId)
-                .get();
-        } else {
-            // Query geral: appEligible ou regular driver
-            snapshot = await db.collection('orders')
-                .where('status', 'in', ['preparing', 'ready'])
-                .get();
-        }
+            if (isStoreDriver && !driverData.appEligible) {
+                // Query restrita: só pedidos da própria loja
+                snapshot = await db.collection('orders')
+                    .where('status', 'in', ['preparing', 'ready'])
+                    .where('storeId', '==', driverData.storeId)
+                    .get();
+            } else {
+                // Query geral: appEligible ou regular driver
+                snapshot = await db.collection('orders')
+                    .where('status', 'in', ['preparing', 'ready'])
+                    .get();
+            }
 
-        availableOrders = snapshot.docs
-            .map(doc => ({ id: doc.id, ...doc.data() }))
-            .filter(o => !o.driverId && o.deliveryMode !== 'pickup');
-        renderAvailableOrders();
-    } catch (e) { console.error('Error loading orders:', e); }
-}
+            availableOrders = snapshot.docs
+                .map(doc => ({ id: doc.id, ...doc.data() }))
+                .filter(o => !o.driverId && o.deliveryMode !== 'pickup');
+            renderAvailableOrders();
+        } catch (e) { console.error('Error loading orders:', e); }
+    }
 
     async function loadMyOrders() {
         if (!driverData) return;
@@ -314,36 +314,41 @@ async function loadAvailableOrders() {
     // ==================== REALTIME LISTENERS ====================
     function setupListeners() {
         // Available orders — query baseada no perfil do driver
-function subscribeAvailableOrders() {
-    const isStoreDriver = driverData?.driverType === 'store' && driverData?.storeId;
-    let query = db.collection('orders').where('status', 'in', ['preparing', 'ready']);
+        function subscribeAvailableOrders() {
+            const isStoreDriver = driverData?.driverType === 'store' && driverData?.storeId;
+            let query = db.collection('orders').where('status', 'in', ['preparing', 'ready']);
 
-    if (isStoreDriver && !driverData.appEligible) {
-        query = query.where('storeId', '==', driverData.storeId);
-    }
-
-    return query.onSnapshot(snapshot => {
-        const prev = availableOrders.length;
-        availableOrders = snapshot.docs
-            .map(doc => ({ id: doc.id, ...doc.data() }))
-            .filter(o => !o.driverId && o.deliveryMode !== 'pickup');
-
-        if (IdleDriver.isStoreDriver() && IdleDriver.state === 'STORE_IDLE') {
-            const hasOwnStoreOrder = availableOrders.some(o => o.storeId === driverData.storeId);
-            if (hasOwnStoreOrder) {
-                IdleDriver.transition('STORE_ORDER_ARRIVED');
-                showToast('Pedido da sua loja — saindo do modo ocioso');
+            if (isStoreDriver && !driverData.appEligible) {
+                query = query.where('storeId', '==', driverData.storeId);
             }
+
+            return query.onSnapshot(snapshot => {
+                const prev = availableOrders.length;
+                availableOrders = snapshot.docs
+                    .map(doc => ({ id: doc.id, ...doc.data() }))
+                    .filter(o => !o.driverId && o.deliveryMode !== 'pickup');
+
+                if (IdleDriver.isStoreDriver() && IdleDriver.state === 'STORE_IDLE') {
+                    const hasOwnStoreOrder = availableOrders.some(o => o.storeId === driverData.storeId);
+                    if (hasOwnStoreOrder) {
+                        IdleDriver.transition('STORE_ORDER_ARRIVED');
+                        showToast('Pedido da sua loja — saindo do modo ocioso');
+                    }
+                }
+
+                renderAvailableOrders();
+
+                if (availableOrders.length > prev && isOnline && !currentDelivery) {
+                    playNotificationSound();
+                    showToast('Nova entrega disponível');
+                }
+            });
         }
 
-        renderAvailableOrders();
+        // ✅ Inicia a inscrição e guarda o "unsubscribe" para evitar listeners duplicados
+        if (window._unsubAvailable) window._unsubAvailable();
+        window._unsubAvailable = subscribeAvailableOrders();
 
-        if (availableOrders.length > prev && isOnline && !currentDelivery) {
-            playNotificationSound();
-            showToast('Nova entrega disponível');
-        }
-    });
-}
         // ── COVERAGE LISTENER ──
         // Tracks which stores have an online assigned driver.
         // Regular drivers use this to hide orders from covered stores.
@@ -393,8 +398,10 @@ function subscribeAvailableOrders() {
                 updateDriverCard();
                 if (IdleDriver.isStoreDriver()) updateIdleUI();
 
-                // Re-render when appEligible changes (store released/blocked for other deliveries)
+                // ✅ Re-subscribe quando appEligible muda, para usar a query correta
                 if (oldData?.appEligible !== newData.appEligible) {
+                    if (window._unsubAvailable) window._unsubAvailable();
+                    window._unsubAvailable = subscribeAvailableOrders();
                     renderAvailableOrders();
                 }
 
@@ -1044,3 +1051,5 @@ function subscribeAvailableOrders() {
     </script>
 </body>
 </html>
+
+
