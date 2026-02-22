@@ -313,32 +313,37 @@ async function loadAvailableOrders() {
 
     // ==================== REALTIME LISTENERS ====================
     function setupListeners() {
-        // Available orders
-        db.collection('orders')
-            .where('status', 'in', ['preparing', 'ready'])
-            .onSnapshot(snapshot => {
-                const prev = availableOrders.length;
-                availableOrders = snapshot.docs
-                    .map(doc => ({ id: doc.id, ...doc.data() }))
-                    .filter(o => !o.driverId && o.deliveryMode !== 'pickup');
+        // Available orders — query baseada no perfil do driver
+function subscribeAvailableOrders() {
+    const isStoreDriver = driverData?.driverType === 'store' && driverData?.storeId;
+    let query = db.collection('orders').where('status', 'in', ['preparing', 'ready']);
 
-                // R2: Auto-exit idle when own store order arrives
-                if (IdleDriver.isStoreDriver() && IdleDriver.state === 'STORE_IDLE') {
-                    const hasOwnStoreOrder = availableOrders.some(o => o.storeId === driverData.storeId);
-                    if (hasOwnStoreOrder) {
-                        IdleDriver.transition('STORE_ORDER_ARRIVED');
-                        showToast('Pedido da sua loja — saindo do modo ocioso');
-                    }
-                }
+    if (isStoreDriver && !driverData.appEligible) {
+        query = query.where('storeId', '==', driverData.storeId);
+    }
 
-                renderAvailableOrders();
+    return query.onSnapshot(snapshot => {
+        const prev = availableOrders.length;
+        availableOrders = snapshot.docs
+            .map(doc => ({ id: doc.id, ...doc.data() }))
+            .filter(o => !o.driverId && o.deliveryMode !== 'pickup');
 
-                if (availableOrders.length > prev && isOnline && !currentDelivery) {
-                    playNotificationSound();
-                    showToast('Nova entrega disponível');
-                }
-            });
+        if (IdleDriver.isStoreDriver() && IdleDriver.state === 'STORE_IDLE') {
+            const hasOwnStoreOrder = availableOrders.some(o => o.storeId === driverData.storeId);
+            if (hasOwnStoreOrder) {
+                IdleDriver.transition('STORE_ORDER_ARRIVED');
+                showToast('Pedido da sua loja — saindo do modo ocioso');
+            }
+        }
 
+        renderAvailableOrders();
+
+        if (availableOrders.length > prev && isOnline && !currentDelivery) {
+            playNotificationSound();
+            showToast('Nova entrega disponível');
+        }
+    });
+}
         // ── COVERAGE LISTENER ──
         // Tracks which stores have an online assigned driver.
         // Regular drivers use this to hide orders from covered stores.
