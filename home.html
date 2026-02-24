@@ -64,7 +64,7 @@
             <div class="current-delivery" id="currentDelivery"></div>
         </div>
 
-        <!-- Accepted Orders (ALWAYS VISIBLE after accept) -->
+        <!-- Accepted Orders -->
         <div id="acceptedSection" style="display:none;">
             <div class="section-title">
                 Minhas Entregas
@@ -166,11 +166,11 @@
     let lastLocationUpdate = 0;
     let navMap = null;
 
-    // Stores with an online assigned driver — regular drivers won't see their orders
+    // coveredStoreIds = storeIds que possuem ao menos 1 entregador vinculado (linkedStores)
     let coveredStoreIds = new Set();
 
     // ==================== INIT ====================
-    document.addEventListener('DOMContentLoaded', async () => {
+document.addEventListener('DOMContentLoaded', async () => {
         const ok = await checkAuth();
         if (!ok) return;
 
@@ -184,9 +184,18 @@
         }
 
         await loadSharedData();
-        await loadOrders();
 
-        setupListeners();
+        // ── Carrega coverage ANTES de renderizar qualquer pedido ──
+        // Sem isso, coveredStoreIds fica vazio no primeiro render
+        // e pedidos bloqueados aparecem por ~1s (janela explorada por bots)
+        const driversSnap = await db.collection('drivers').get();
+        coveredStoreIds = new Set();
+        driversSnap.docs.forEach(doc => {
+            (doc.data().linkedStores || []).forEach(sid => coveredStoreIds.add(sid));
+        });
+
+        await loadOrders();    // já roda com coveredStoreIds correto
+        setupListeners();      // listener contínuo mantém coverage atualizado
         setupDriverPushNotifications();
 
         if (IdleDriver.isStoreDriver()) {
@@ -196,7 +205,6 @@
             document.getElementById('idleStatusBox').style.display = 'block';
         }
     });
-
     // ==================== DRIVER UI ====================
     function updateDriverCard() {
         if (!driverData) return;
@@ -221,12 +229,10 @@
 
     function updateIdleUI() {
         const text = document.getElementById('idleStatusText');
-        const dot = document.getElementById('idleDot');
+        const dot  = document.getElementById('idleDot');
         if (!text || !dot) return;
-
         text.textContent = IdleDriver.getStateLabel();
         dot.style.background = IdleDriver.getStateColor();
-
         if (IdleDriver.state === 'COOLDOWN') {
             dot.style.animation = 'none';
         } else if (IdleDriver.state === 'STORE_IDLE') {
@@ -236,31 +242,15 @@
 
     // ==================== ORDERS LOADING ====================
     async function loadOrders() {
-        await Promise.all([
-            loadAvailableOrders(),
-            loadMyOrders()
-        ]);
+        await Promise.all([ loadAvailableOrders(), loadMyOrders() ]);
         updateStats();
     }
 
     async function loadAvailableOrders() {
         try {
-            const isStoreDriver = driverData?.driverType === 'store' && driverData?.storeId;
-            let snapshot;
-
-            if (isStoreDriver && !driverData.appEligible) {
-                // Query restrita: só pedidos da própria loja
-                snapshot = await db.collection('orders')
-                    .where('status', 'in', ['preparing', 'ready'])
-                    .where('storeId', '==', driverData.storeId)
-                    .get();
-            } else {
-                // Query geral: appEligible ou regular driver
-                snapshot = await db.collection('orders')
-                    .where('status', 'in', ['preparing', 'ready'])
-                    .get();
-            }
-
+            const snapshot = await db.collection('orders')
+                .where('status', 'in', ['preparing', 'ready'])
+                .get();
             availableOrders = snapshot.docs
                 .map(doc => ({ id: doc.id, ...doc.data() }))
                 .filter(o => !o.driverId && o.deliveryMode !== 'pickup');
@@ -275,7 +265,6 @@
                 .where('driverId', '==', driverData.id)
                 .where('status', 'in', ['preparing', 'ready', 'delivering'])
                 .get();
-
             const myOrders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
             acceptedOrders = myOrders.filter(o => o.status === 'preparing' || o.status === 'ready');
@@ -297,10 +286,7 @@
 
     async function loadHistoryForStats() {
         const cached = Cache.getHistory();
-        if (cached) {
-            allHistory = cached;
-            return;
-        }
+        if (cached) { allHistory = cached; return; }
         try {
             const snapshot = await db.collection('orders')
                 .where('driverId', '==', driverData.id)
@@ -312,68 +298,65 @@
     }
 
     // ==================== REALTIME LISTENERS ====================
-    function setupListeners() {
-        // Available orders — query baseada no perfil do driver
-        function subscribeAvailableOrders() {
-            const isStoreDriver = driverData?.driverType === 'store' && driverData?.storeId;
-            let query = db.collection('orders').where('status', 'in', ['preparing', 'ready']);
-
-            if (isStoreDriver && !driverData.appEligible) {
-                query = query.where('storeId', '==', driverData.storeId);
-            }
-
-            return query.onSnapshot(snapshot => {
-                const prev = availableOrders.length;
-                availableOrders = snapshot.docs
-                    .map(doc => ({ id: doc.id, ...doc.data() }))
-                    .filter(o => !o.driverId && o.deliveryMode !== 'pickup');
-
-                if (IdleDriver.isStoreDriver() && IdleDriver.state === 'STORE_IDLE') {
-                    const hasOwnStoreOrder = availableOrders.some(o => o.storeId === driverData.storeId);
-                    if (hasOwnStoreOrder) {
-                        IdleDriver.transition('STORE_ORDER_ARRIVED');
-                        showToast('Pedido da sua loja — saindo do modo ocioso');
-                    }
-                }
-
-                renderAvailableOrders();
-
-                if (availableOrders.length > prev && isOnline && !currentDelivery) {
-                    playNotificationSound();
-                    showToast('Nova entrega disponível');
-                }
+  function setupListeners() {
+        // 1. Carrega coverage SINCRONAMENTE antes de abrir qualquer listener de pedidos
+        //    Garante que coveredStoreIds já está populado quando os pedidos chegarem
+        db.collection('drivers').get().then(snapshot => {
+            coveredStoreIds = new Set();
+            snapshot.docs.forEach(doc => {
+                (doc.data().linkedStores || []).forEach(sid => coveredStoreIds.add(sid));
             });
-        }
 
-        // ✅ Inicia a inscrição e guarda o "unsubscribe" para evitar listeners duplicados
-        if (window._unsubAvailable) window._unsubAvailable();
-        window._unsubAvailable = subscribeAvailableOrders();
+            // Só depois de ter o coverage, sobe o listener de pedidos
+            subscribeAvailableOrders();
+        });
 
-        // ── COVERAGE LISTENER ──
-        // Tracks which stores have an online assigned driver.
-        // Regular drivers use this to hide orders from covered stores.
-        db.collection('drivers')
-            .where('driverType', '==', 'store')
-            .onSnapshot(snapshot => {
-                coveredStoreIds = new Set();
-                snapshot.docs.forEach(doc => {
-                    const d = doc.data();
-                    // Store is "covered" when its assigned driver is online (not OFFLINE)
-                    if (d.storeId && d.idleState !== 'OFFLINE' && d.online !== false) {
-                        coveredStoreIds.add(d.storeId);
+        // 2. Listener contínuo de coverage para manter atualizado
+        db.collection('drivers').onSnapshot(snapshot => {
+            coveredStoreIds = new Set();
+            snapshot.docs.forEach(doc => {
+                (doc.data().linkedStores || []).forEach(sid => coveredStoreIds.add(sid));
+            });
+            renderAvailableOrders();
+        });
+
+        // 3. Pedidos disponíveis
+        function subscribeAvailableOrders() {
+            if (window._unsubAvailable) window._unsubAvailable();
+
+            window._unsubAvailable = db.collection('orders')
+                .where('status', 'in', ['preparing', 'ready'])
+                .onSnapshot(snapshot => {
+                    const prevVisible = getFilteredOrders().length;
+
+                    availableOrders = snapshot.docs
+                        .map(doc => ({ id: doc.id, ...doc.data() }))
+                        .filter(o => !o.driverId && o.deliveryMode !== 'pickup');
+
+                    if (IdleDriver.isStoreDriver() && IdleDriver.state === 'STORE_IDLE') {
+                        if (availableOrders.some(o => o.storeId === driverData.storeId)) {
+                            IdleDriver.transition('STORE_ORDER_ARRIVED');
+                            showToast('Pedido da sua loja — saindo do modo ocioso');
+                        }
+                    }
+
+                    renderAvailableOrders();
+
+                    const nowVisible = getFilteredOrders().length;
+                    if (nowVisible > prevVisible && isOnline && !currentDelivery) {
+                        playNotificationSound();
+                        showToast('Nova entrega disponível');
                     }
                 });
-                renderAvailableOrders();
-            });
+        }
 
-        // My orders (accepted + delivering)
+        // 4. Meus pedidos
         if (driverData) {
             db.collection('orders')
                 .where('driverId', '==', driverData.id)
                 .where('status', 'in', ['preparing', 'ready', 'delivering'])
                 .onSnapshot(snapshot => {
                     const myOrders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
                     acceptedOrders = myOrders.filter(o => o.status === 'preparing' || o.status === 'ready');
                     renderAcceptedOrders();
 
@@ -388,24 +371,14 @@
                         currentDelivery = null;
                         document.getElementById('currentDeliverySection').style.display = 'none';
                     }
-
                     showNavMapButton();
                     updateStats();
                 });
 
-            // Driver data changes
             setupDriverListener((newData, oldData) => {
                 updateDriverCard();
                 if (IdleDriver.isStoreDriver()) updateIdleUI();
-
-                // ✅ Re-subscribe quando appEligible muda, para usar a query correta
-                if (oldData?.appEligible !== newData.appEligible) {
-                    if (window._unsubAvailable) window._unsubAvailable();
-                    window._unsubAvailable = subscribeAvailableOrders();
-                    renderAvailableOrders();
-                }
-
-                if (oldData?.rating && newData.rating && newData.rating !== oldData.rating) {
+                if (oldData?.rating && newData.rating !== oldData.rating) {
                     const diff = (newData.rating - oldData.rating).toFixed(1);
                     showToast(`${diff > 0 ? '↑' : '↓'} Avaliação: ${newData.rating.toFixed(1)}`);
                 }
@@ -416,27 +389,40 @@
 
         loadHistoryForStats();
     }
+    // ==================== FILTER (central) ====================
+    function getFilteredOrders() {
+        if (!driverData) return [];
+
+        const myLinkedStores = new Set(driverData.linkedStores || []);
+        const isStoreDriver  = driverData.driverType === 'store' && driverData.storeId;
+
+        return availableOrders.filter(o => {
+            const sid = o.storeId;
+
+            // Sem loja → visível para todos
+            if (!sid) return true;
+
+            const isCovered = coveredStoreIds.has(sid);
+
+            if (isCovered) {
+                // Loja com entregador vinculado → apenas quem está vinculado vê
+                if (!myLinkedStores.has(sid)) return false;
+
+                // Driver de loja: outras lojas cobertas só com appEligible
+                if (isStoreDriver && sid !== driverData.storeId && !driverData.appEligible) {
+                    return false;
+                }
+            }
+
+            return true;
+        });
+    }
 
     // ==================== RENDER ====================
     function renderAvailableOrders() {
-        const container = document.getElementById('availableDeliveries');
+        const container     = document.getElementById('availableDeliveries');
         const isStoreDriver = driverData?.driverType === 'store' && driverData?.storeId;
-
-        // ── FILTERING ──
-        // Rule 1: Store driver ALWAYS sees own store orders (never hidden, never blocked)
-        // Rule 2: Store driver sees other stores ONLY when appEligible === true
-        // Rule 3: Regular/untyped driver does NOT see orders from stores with online assigned driver
-        let filtered;
-        if (isStoreDriver) {
-            const ownStore = availableOrders.filter(o => o.storeId === driverData.storeId);
-            const otherStores = driverData.appEligible
-                ? availableOrders.filter(o => o.storeId !== driverData.storeId)
-                : [];
-            filtered = [...ownStore, ...otherStores];
-        } else {
-            // Regular driver: hide orders from stores that have an online assigned driver
-            filtered = availableOrders.filter(o => !o.storeId || !coveredStoreIds.has(o.storeId));
-        }
+        let filtered        = getFilteredOrders();
 
         document.getElementById('availableCount').textContent = filtered.length;
 
@@ -450,22 +436,13 @@
         }
 
         const maxOrders = driverData?.maxSimultaneousOrders || 1;
-        const myActive = (acceptedOrders.length || 0) + (currentDelivery ? 1 : 0);
+        const myActive  = (acceptedOrders.length || 0) + (currentDelivery ? 1 : 0);
 
-        // At max capacity: store driver STILL sees own store orders (they bypass the limit)
         if (myActive >= maxOrders) {
             if (isStoreDriver) {
-                // Keep only own store orders (others are blocked by limit)
                 filtered = filtered.filter(o => o.storeId === driverData.storeId);
-                if (filtered.length === 0) {
-                    container.innerHTML = `<div class="empty-state">
-                        <div class="empty-state-icon">◎</div>
-                        <div class="empty-state-title">Limite atingido</div>
-                        <div class="empty-state-text">Finalize suas entregas antes de aceitar novas</div>
-                    </div>`;
-                    return;
-                }
-            } else {
+            }
+            if (!filtered.length) {
                 container.innerHTML = `<div class="empty-state">
                     <div class="empty-state-icon">◎</div>
                     <div class="empty-state-title">Limite atingido</div>
@@ -475,7 +452,7 @@
             }
         }
 
-        if (filtered.length === 0) {
+        if (!filtered.length) {
             container.innerHTML = `<div class="empty-state">
                 <div class="empty-state-icon">—</div>
                 <div class="empty-state-title">Nenhuma entrega disponível</div>
@@ -486,12 +463,13 @@
 
         container.innerHTML = filtered.map(order => {
             const waitTime = getWaitTime(order.createdAt);
-            const fee = getDeliveryFee(order.address?.neighborhood);
-            const earning = calculateDriverEarning(fee, order.distance);
-            const isOwn = isStoreDriver && order.storeId === driverData.storeId;
+            const fee      = getDeliveryFee(order.address?.neighborhood);
+            const earning  = calculateDriverEarning(fee, order.distance);
+            const isOwn    = isStoreDriver && order.storeId === driverData.storeId;
 
             return `
-            <div class="delivery-card ${waitTime > 15 ? 'urgent' : ''}" id="order-${order.id}" ${isOwn ? 'style="border-left:3px solid var(--primary);"' : ''}>
+            <div class="delivery-card ${waitTime > 15 ? 'urgent' : ''}" id="order-${order.id}"
+                 ${isOwn ? 'style="border-left:3px solid var(--primary);"' : ''}>
                 <div class="delivery-header">
                     <div class="delivery-store">
                         <div class="delivery-store-icon" id="icon-${order.id}">□</div>
@@ -544,22 +522,19 @@
     }
 
     function renderAcceptedOrders() {
-        const section = document.getElementById('acceptedSection');
-        const container = document.getElementById('acceptedOrders');
+        const section    = document.getElementById('acceptedSection');
+        const container  = document.getElementById('acceptedOrders');
 
-        if (acceptedOrders.length === 0) {
-            section.style.display = 'none';
-            return;
-        }
+        if (!acceptedOrders.length) { section.style.display = 'none'; return; }
 
         section.style.display = 'block';
         document.getElementById('acceptedCount').textContent = acceptedOrders.length;
 
         container.innerHTML = acceptedOrders.map(order => {
-            const fee = getDeliveryFee(order.address?.neighborhood);
-            const earning = calculateDriverEarning(order.driverEarning || fee, order.distance);
+            const fee         = getDeliveryFee(order.address?.neighborhood);
+            const earning     = calculateDriverEarning(order.driverEarning || fee, order.distance);
             const statusLabel = order.status === 'preparing' ? 'Preparando' : 'Pronto p/ retirada';
-            const canPickup = order.status === 'ready';
+            const canPickup   = order.status === 'ready';
 
             return `
             <div class="delivery-card" id="accepted-${order.id}" style="border-color: var(--text-muted);">
@@ -592,7 +567,7 @@
                         </div>
                     </div>
                     <div class="delivery-actions">
-                        ${canPickup 
+                        ${canPickup
                             ? `<button class="btn btn-warning" onclick="startDelivery('${order.id}')" style="flex:1;">Iniciar Retirada</button>`
                             : `<button class="btn btn-secondary" disabled style="flex:1;">Aguardando preparo</button>`
                         }
@@ -621,10 +596,10 @@
         if (!currentDelivery) return;
         document.getElementById('currentDeliverySection').style.display = 'block';
 
-        const fee = getDeliveryFee(currentDelivery.address?.neighborhood);
-        const earning = calculateDriverEarning(currentDelivery.driverEarning || fee, currentDelivery.distance);
+        const fee        = getDeliveryFee(currentDelivery.address?.neighborhood);
+        const earning    = calculateDriverEarning(currentDelivery.driverEarning || fee, currentDelivery.distance);
         const clientName = currentDelivery.userName || 'Cliente';
-        const clientPhone = currentDelivery.userPhone || '';
+        const clientPhone= currentDelivery.userPhone || '';
 
         document.getElementById('currentDelivery').innerHTML = `
             <div class="current-delivery-header">
@@ -657,7 +632,7 @@
                 <div class="client-name">${clientName}</div>
                 ${clientPhone ? `<div class="client-phone"><a href="tel:${clientPhone}" style="color:var(--primary);text-decoration:none;">${clientPhone}</a></div>` : ''}
                 ${currentDelivery.address?.complement ? `<div style="font-size:0.8rem;color:var(--text-muted);margin-top:8px;">${currentDelivery.address.complement}</div>` : ''}
-                ${currentDelivery.address?.reference ? `<div style="font-size:0.8rem;color:var(--text-muted);">Ref: ${currentDelivery.address.reference}</div>` : ''}
+                ${currentDelivery.address?.reference  ? `<div style="font-size:0.8rem;color:var(--text-muted);">Ref: ${currentDelivery.address.reference}</div>` : ''}
             </div>
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding:12px;background:var(--bg-input);border-radius:8px;border:1px solid var(--border);">
                 <span style="color:var(--text-muted);font-size:0.85rem;">Seu ganho</span>
@@ -682,12 +657,12 @@
             todayOrders.forEach(o => {
                 const fee = o.driverEarning || getDeliveryFee(o.address?.neighborhood);
                 money += calculateDriverEarning(fee, o.distance);
-                dist += o.distance || 3.5;
+                dist  += o.distance || 3.5;
             });
 
-            document.getElementById('todayEarnings').textContent = formatCurrency(money);
-            document.getElementById('todayDeliveries').textContent = todayOrders.length;
-            document.getElementById('todayDistance').textContent = `${dist.toFixed(1)} km`;
+            document.getElementById('todayEarnings').textContent   = formatCurrency(money);
+            document.getElementById('todayDeliveries').textContent  = todayOrders.length;
+            document.getElementById('todayDistance').textContent    = `${dist.toFixed(1)} km`;
         });
     }
 
@@ -698,6 +673,7 @@
                 setupDriverPushNotifications().catch(() => {});
             }
         } catch(e) {}
+
         isOnline = !isOnline;
         document.getElementById('onlineToggle').classList.toggle('active', isOnline);
         document.getElementById('statusText').textContent = isOnline ? 'Online' : 'Offline';
@@ -742,7 +718,7 @@
         pendingAcceptOrder = availableOrders.find(o => o.id === orderId);
         if (!pendingAcceptOrder) return;
 
-        const fee = getDeliveryFee(pendingAcceptOrder.address?.neighborhood);
+        const fee     = getDeliveryFee(pendingAcceptOrder.address?.neighborhood);
         const earning = calculateDriverEarning(fee, pendingAcceptOrder.distance);
 
         document.getElementById('acceptModalText').textContent =
@@ -766,10 +742,9 @@
         if (!pendingAcceptOrder || !driverData) return;
 
         const isStoreDriverFlag = driverData.driverType === 'store' && driverData.storeId;
-        const isOwnStore = isStoreDriverFlag && pendingAcceptOrder.storeId === driverData.storeId;
-        const isOtherStore = isStoreDriverFlag && !isOwnStore;
+        const isOwnStore        = isStoreDriverFlag && pendingAcceptOrder.storeId === driverData.storeId;
+        const isOtherStore      = isStoreDriverFlag && !isOwnStore;
 
-        // Store driver can accept other stores ONLY if appEligible
         if (isOtherStore && !driverData.appEligible) {
             closeModal('acceptModal');
             showToast('Você não está liberado para entregas de outras lojas');
@@ -777,9 +752,8 @@
         }
 
         const maxOrders = driverData.maxSimultaneousOrders || 1;
-        const myActive = acceptedOrders.length + (currentDelivery ? 1 : 0);
+        const myActive  = acceptedOrders.length + (currentDelivery ? 1 : 0);
 
-        // OWN STORE orders BYPASS the max limit — driver is NEVER unavailable for own store
         if (!isOwnStore && myActive >= maxOrders) {
             closeModal('acceptModal');
             showToast('Limite de entregas simultâneas atingido');
@@ -787,7 +761,7 @@
         }
 
         try {
-            const fee = getDeliveryFee(pendingAcceptOrder.address?.neighborhood);
+            const fee     = getDeliveryFee(pendingAcceptOrder.address?.neighborhood);
             const earning = calculateDriverEarning(fee, pendingAcceptOrder.distance);
 
             const timeline = pendingAcceptOrder.timeline || [];
@@ -798,17 +772,17 @@
             });
 
             await db.collection('orders').doc(pendingAcceptOrder.id).update({
-                driverId: driverData.id,
-                driverName: driverData.name,
-                driverPhone: driverData.phone,
+                driverId:      driverData.id,
+                driverName:    driverData.name,
+                driverPhone:   driverData.phone,
                 driverVehicle: driverData.vehicle,
                 driver: {
-                    id: driverData.id,
-                    name: driverData.name,
-                    phone: driverData.phone,
-                    vehicle: driverData.vehicle,
-                    photoUrl: driverData.photoUrl || null,
-                    allowPhone: driverData.allowPhone || false,
+                    id:            driverData.id,
+                    name:          driverData.name,
+                    phone:         driverData.phone,
+                    vehicle:       driverData.vehicle,
+                    photoUrl:      driverData.photoUrl || null,
+                    allowPhone:    driverData.allowPhone || false,
                     allowWhatsapp: driverData.allowWhatsapp || false
                 },
                 driverEarning: earning,
@@ -816,7 +790,6 @@
                 acceptedAt: firebase.firestore.FieldValue.serverTimestamp()
             });
 
-            // Idle state transitions
             if (IdleDriver.isStoreDriver()) {
                 if (isOtherStore) {
                     IdleDriver.transition('APP_TRIP_ASSIGNED');
@@ -851,13 +824,11 @@
                 timestamp: new Date().toISOString(),
                 message: 'Pedido retirado, saiu para entrega'
             });
-
             await db.collection('orders').doc(order.id).update({
                 status: 'delivering',
                 timeline,
                 pickedUpAt: firebase.firestore.FieldValue.serverTimestamp()
             });
-
             showToast('Pedido retirado - Siga para o cliente');
         } catch (e) {
             console.error('Error starting delivery:', e);
@@ -874,7 +845,7 @@
 
     function captureLocationAuto() {
         const statusEl = document.getElementById('locationStatus');
-        const btnEl = document.getElementById('confirmDeliveryBtn');
+        const btnEl    = document.getElementById('confirmDeliveryBtn');
 
         statusEl.innerHTML = '<span class="location-icon">◌</span><span class="location-text">Capturando localização...</span>';
         statusEl.className = 'location-status loading';
@@ -941,17 +912,13 @@
             if (driverData) {
                 await db.collection('drivers').doc(driverData.id).update({
                     totalDeliveries: firebase.firestore.FieldValue.increment(1),
-                    lastDeliveryAt: firebase.firestore.FieldValue.serverTimestamp()
+                    lastDeliveryAt:  firebase.firestore.FieldValue.serverTimestamp()
                 });
             }
 
             if (IdleDriver.isStoreDriver()) {
                 const wasOwnStore = deliveryRef.storeId === driverData.storeId;
-                if (wasOwnStore) {
-                    IdleDriver.transition('STORE_DELIVERY_DONE');
-                } else {
-                    IdleDriver.transition('APP_TRIP_ENDED');
-                }
+                IdleDriver.transition(wasOwnStore ? 'STORE_DELIVERY_DONE' : 'APP_TRIP_ENDED');
             }
 
             Cache.remove('history');
@@ -977,14 +944,12 @@
                 const now = Date.now();
                 if (now - lastLocationUpdate < 5000) return;
                 lastLocationUpdate = now;
-
-                const location = {
-                    lat: pos.coords.latitude,
-                    lng: pos.coords.longitude,
-                    accuracy: pos.coords.accuracy,
+                await updateDriverLocationInOrder({
+                    lat:       pos.coords.latitude,
+                    lng:       pos.coords.longitude,
+                    accuracy:  pos.coords.accuracy,
                     timestamp: new Date().toISOString()
-                };
-                await updateDriverLocationInOrder(location);
+                });
             },
             (err) => { console.warn('GPS watch error:', err); },
             { enableHighAccuracy: true, maximumAge: 3000, timeout: 15000 }
@@ -1004,10 +969,12 @@
             await db.collection('orders').doc(currentDelivery.id).update({
                 driverLocation: location,
                 driver: {
-                    id: driverData.id, name: driverData.name,
-                    phone: driverData.phone || '', vehicle: driverData.vehicle || 'Moto',
-                    photoUrl: driverData.photoUrl || null,
-                    allowPhone: driverData.allowPhone || false,
+                    id:            driverData.id,
+                    name:          driverData.name,
+                    phone:         driverData.phone || '',
+                    vehicle:       driverData.vehicle || 'Moto',
+                    photoUrl:      driverData.photoUrl || null,
+                    allowPhone:    driverData.allowPhone || false,
                     allowWhatsapp: driverData.allowWhatsapp || false
                 }
             });
@@ -1051,5 +1018,3 @@
     </script>
 </body>
 </html>
-
-
