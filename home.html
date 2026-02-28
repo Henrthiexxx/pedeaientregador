@@ -694,7 +694,7 @@ function getFilteredOrders() {
         openModal('acceptModal');
     }
 
-    async function confirmAccept() {
+async function confirmAccept() {
     if (!pendingAcceptOrder || !driverData) return;
 
     const sid = pendingAcceptOrder.storeId;
@@ -733,51 +733,83 @@ function getFilteredOrders() {
         return;
     }
 
+    // Desabilita botão durante operação
+    const confirmBtn = document.querySelector('#acceptModal .btn-primary');
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = 'Processando...';
+
     try {
-        const fee     = getDeliveryFee(pendingAcceptOrder.address?.neighborhood);
-        const earning = calculateDriverEarning(fee, pendingAcceptOrder.distance);
-        const timeline = pendingAcceptOrder.timeline || [];
-        timeline.push({
-            status: 'accepted',
-            timestamp: new Date().toISOString(),
-            message: `Entregador ${driverData.name} aceitou`
+        await db.runTransaction(async (transaction) => {
+            const docRef = db.collection('orders').doc(pendingAcceptOrder.id);
+            const docSnap = await transaction.get(docRef);
+            
+            // Se outro driver pegou, falha a transação
+            if (docSnap.data().driverId) {
+                throw new Error('ALREADY_ACCEPTED');
+            }
+
+            const fee     = getDeliveryFee(pendingAcceptOrder.address?.neighborhood);
+            const earning = calculateDriverEarning(fee, pendingAcceptOrder.distance);
+            const timeline = pendingAcceptOrder.timeline || [];
+            timeline.push({
+                status: 'accepted',
+                timestamp: new Date().toISOString(),
+                message: `Entregador ${driverData.name} aceitou`
+            });
+
+            transaction.update(docRef, {
+                driverId:      driverData.id,
+                driverName:    driverData.name,
+                driverPhone:   driverData.phone,
+                driverVehicle: driverData.vehicle,
+                driver: {
+                    id:            driverData.id,
+                    name:          driverData.name,
+                    phone:         driverData.phone,
+                    vehicle:       driverData.vehicle,
+                    photoUrl:      driverData.photoUrl || null,
+                    allowPhone:    driverData.allowPhone || false,
+                    allowWhatsapp: driverData.allowWhatsapp || false
+                },
+                driverEarning: earning,
+                timeline,
+                acceptedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
         });
 
-        await db.collection('orders').doc(pendingAcceptOrder.id).update({
-            driverId:      driverData.id,
-            driverName:    driverData.name,
-            driverPhone:   driverData.phone,
-            driverVehicle: driverData.vehicle,
-            driver: {
-                id:            driverData.id,
-                name:          driverData.name,
-                phone:         driverData.phone,
-                vehicle:       driverData.vehicle,
-                photoUrl:      driverData.photoUrl || null,
-                allowPhone:    driverData.allowPhone || false,
-                allowWhatsapp: driverData.allowWhatsapp || false
-            },
-            driverEarning: earning,
-            timeline,
-            acceptedAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-
+        // Sucesso na transação
         if (IdleDriver.isStoreDriver()) {
-            const isOtherStore = isStoreDriverFlag && !isOwnStore;
-            if (isOtherStore)                                          IdleDriver.transition('APP_TRIP_ASSIGNED');
-            else if (isOwnStore && IdleDriver.state === 'COOLDOWN')    IdleDriver.transition('STORE_ORDER_IN_COOLDOWN');
+            if (isOwnStore && IdleDriver.state === 'COOLDOWN')    IdleDriver.transition('STORE_ORDER_IN_COOLDOWN');
             else if (isOwnStore && IdleDriver.state === 'STORE_IDLE')  IdleDriver.transition('STORE_ORDER_ARRIVED');
+            else if (!isOwnStore) IdleDriver.transition('APP_TRIP_ASSIGNED');
         }
 
         closeModal('acceptModal');
         showToast('Entrega aceita');
         pendingAcceptOrder = null;
+
     } catch (e) {
-        console.error('Error accepting:', e);
-        showToast('Erro ao aceitar entrega');
+        if (e.message === 'ALREADY_ACCEPTED') {
+            showToast('Outro entregador pegou essa entrega');
+        } else {
+            console.error('Error accepting:', e);
+            showToast('Erro ao aceitar entrega');
+        }
+    } finally {
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'Aceitar';
     }
 }
-    // ==================== START DELIVERY ====================
+
+function openModal(id) {
+    document.getElementById(id).classList.add('active');
+}
+
+function closeModal(id) {
+    document.getElementById(id).classList.remove('active');
+}
+// ==================== START DELIVERY ====================
+   
     function startDelivery(orderId) {
         const order = acceptedOrders.find(o => o.id === orderId);
         if (!order) return;
