@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Pedrad - Início</title>
     <meta name="theme-color" content="#000000">
+
+        <script>
+        window.BASE_PATH = location.pathname.substring(0, location.pathname.lastIndexOf('/') + 1);
+        console.log('Base path:', window.BASE_PATH);
+    </script>
     <link rel="stylesheet" href="index.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 </head>
