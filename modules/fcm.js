@@ -47,7 +47,7 @@ const FCMModule = {
             const permission = await Notification.requestPermission();
             if (permission !== 'granted') return null;
 
-            const vapidKey = 'BEyLjUm82KxRNv4fCZOWxBln45CjHSleYDOgBCDffXVPP45SsFmZHxJxP0A0hJ0c8uZWdWU8u_YLIacXXYWtCV4';
+            const vapidKey = 'BLt2icpkQT3LTtfJJybWVF4xjkZ1_L4dmt_qRszLGJF6ACFOK3MGtIIVgokt9l-zh5dSa1FqKG-XstNZVTrMpCc';
             if (!this.messaging || !this.swReg) return null;
 
             this.token = await this.messaging.getToken({
