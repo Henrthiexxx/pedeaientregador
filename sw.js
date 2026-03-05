@@ -1,4 +1,5 @@
-const CACHE_NAME = 'pedrad-v1';
+const CACHE_VERSION = 2;
+const CACHE_NAME = 'pedrad-v' + CACHE_VERSION;
 const urlsToCache = [
     '/',
     '/index.html',
@@ -13,33 +14,33 @@ self.addEventListener('install', event => {
     self.skipWaiting();
 });
 
-self.addEventListener('fetch', event => {
-    // Network first, fallback to cache
-    event.respondWith(
-        fetch(event.request)
-            .then(response => {
-                // Clone and cache successful responses
-                if (response.ok) {
-                    const responseClone = response.clone();
-                    caches.open(CACHE_NAME).then(cache => {
-                        cache.put(event.request, responseClone);
-                    });
-                }
-                return response;
-            })
-            .catch(() => {
-                return caches.match(event.request);
-            })
+self.addEventListener('activate', event => {
+    event.waitUntil(
+        caches.keys().then(names =>
+            Promise.all(
+                names.filter(n => n.startsWith('pedrad-v') && n !== CACHE_NAME)
+                    .map(n => caches.delete(n))
+            )
+        ).then(() => self.clients.claim())
     );
 });
 
-self.addEventListener('activate', event => {
-    event.waitUntil(
-        caches.keys().then(cacheNames => {
-            return Promise.all(
-                cacheNames.filter(name => name !== CACHE_NAME)
-                    .map(name => caches.delete(name))
-            );
-        })
+self.addEventListener('fetch', event => {
+    // HTML: sempre network first
+    if (event.request.mode === 'navigate') {
+        event.respondWith(
+            fetch(event.request).catch(() => caches.match(event.request))
+        );
+        return;
+    }
+    // Resto: network first, cache fallback
+    event.respondWith(
+        fetch(event.request).then(response => {
+            if (response.ok) {
+                const clone = response.clone();
+                caches.open(CACHE_NAME).then(c => c.put(event.request, clone));
+            }
+            return response;
+        }).catch(() => caches.match(event.request))
     );
 });
