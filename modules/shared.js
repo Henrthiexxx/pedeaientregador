@@ -216,11 +216,41 @@ function renderBottomNav(activePage) {
 // ==================== NOTIFICATION SOUND ====================
 
 function playNotificationSound() {
+    // Vibração sempre
+    if ('vibrate' in navigator) {
+        navigator.vibrate([200, 100, 200]);
+    }
+    
     try {
-        const audio = new Audio('notify.mp3');
-        audio.play().catch(() => {});
-        if ('vibrate' in navigator) {
-            navigator.vibrate([200, 100, 200]);
-        }
+        // Tenta com BASE_PATH se disponível
+        const basePath = (typeof window.BASE_PATH !== 'undefined') 
+            ? window.BASE_PATH 
+            : location.pathname.substring(0, location.pathname.lastIndexOf('/') + 1);
+        
+        const audio = new Audio(basePath + 'notify.mp3');
+        audio.volume = 1.0;
+        audio.play().catch(() => playGeneratedSound());
+    } catch (e) {
+        playGeneratedSound();
+    }
+}
+
+function playGeneratedSound() {
+    // Web Audio API fallback - som de notificação
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.frequency.value = 800;
+        osc.type = 'sine';
+        
+        gain.gain.setValueAtTime(0.3, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
+        
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.2);
     } catch (e) {}
 }

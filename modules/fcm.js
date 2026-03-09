@@ -5,7 +5,6 @@ const FCMModule = {
     messaging: null,
     token: null,
     swReg: null,
-    customSoundUrl: null, // base64 ou URL do som custom
 
     async init() {
         if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
@@ -26,8 +25,6 @@ const FCMModule = {
                 console.log('📩 Foreground:', payload);
                 this.handleForegroundNotification(payload);
             });
-
-            this.loadCustomSound();
 
             navigator.serviceWorker.addEventListener('message', (event) => {
                 if (event.data?.type === 'NOTIFICATION_CLICK') {
@@ -141,8 +138,8 @@ const FCMModule = {
             showToast(body);
         }
 
-        // Som (custom ou padrão)
-        this.playNotificationSound(msg.urgent);
+        // Som (notify.mp3 padrão obrigatório)
+        playNotificationSound();
 
         // Vibração
         if (navigator.vibrate) {
@@ -167,83 +164,9 @@ const FCMModule = {
             const el = document.getElementById('availableSection');
             if (el) el.scrollIntoView({ behavior: 'smooth' });
         }
-    },
-
-    // ==================== CUSTOM SOUND ====================
-    playNotificationSound(urgent = false) {
-        try {
-            // Tenta som custom primeiro
-            if (this.customSoundUrl) {
-                const audio = new Audio(this.customSoundUrl);
-                audio.volume = 1.0;
-                audio.play().catch(() => this.playDefaultSound(urgent));
-                return;
-            }
-            this.playDefaultSound(urgent);
-        } catch (e) {
-            this.playDefaultSound(urgent);
-        }
-    },
-
-    playDefaultSound(urgent = false) {
-        // Tenta arquivo local notify.mp3
-        try {
-            const audio = new Audio('notify.mp3');
-            audio.volume = 1.0;
-            audio.play().catch(() => this.playGeneratedSound(urgent));
-        } catch (e) {
-            this.playGeneratedSound(urgent);
-        }
-    },
-
-    playGeneratedSound(urgent = false) {
-        // Fallback: gera som via Web Audio API
-        try {
-            const ctx = new (window.AudioContext || window.webkitAudioContext)();
-            const freqs = urgent ? [880, 1100, 1320] : [660, 880];
-            const dur = urgent ? 0.15 : 0.12;
-
-            freqs.forEach((freq, i) => {
-                const osc = ctx.createOscillator();
-                const gain = ctx.createGain();
-                osc.connect(gain);
-                gain.connect(ctx.destination);
-                osc.frequency.value = freq;
-                osc.type = 'sine';
-                gain.gain.setValueAtTime(0.3, ctx.currentTime + i * (dur + 0.08));
-                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * (dur + 0.08) + dur);
-                osc.start(ctx.currentTime + i * (dur + 0.08));
-                osc.stop(ctx.currentTime + i * (dur + 0.08) + dur);
-            });
-        } catch (e) {}
-    },
-
-    // Salva som custom escolhido pelo usuário
-    loadCustomSound() {
-        try {
-            this.customSoundUrl = localStorage.getItem('pedrad_custom_sound') || null;
-        } catch (e) {}
-    },
-
-    saveCustomSound(base64DataUrl) {
-        try {
-            localStorage.setItem('pedrad_custom_sound', base64DataUrl);
-            this.customSoundUrl = base64DataUrl;
-        } catch (e) {
-            console.error('Erro ao salvar som:', e);
-        }
-    },
-
-    removeCustomSound() {
-        localStorage.removeItem('pedrad_custom_sound');
-        this.customSoundUrl = null;
-    },
-
-    // Preview do som custom
-    previewSound() {
-        this.playNotificationSound(true);
     }
 };
+
 // ==================== SETUP FUNCTIONS ====================
 
 async function setupDriverPushNotifications() {
@@ -276,38 +199,4 @@ async function setupStorePushNotifications(storeId) {
 
 async function cleanupPushNotifications(userId, userType) {
     await FCMModule.removeToken(userId, userType);
-}
-
-// ==================== SOUND PICKER (para profile.html) ====================
-// Chame openSoundPicker() de um botão no perfil do entregador
-
-function openSoundPicker() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'audio/*';
-    input.onchange = (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        // Max 500KB para não estourar localStorage
-        if (file.size > 512000) {
-            if (typeof showToast === 'function') showToast('Arquivo muito grande (máx 500KB)');
-            return;
-        }
-
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-            FCMModule.saveCustomSound(ev.target.result);
-            if (typeof showToast === 'function') showToast('🔔 Som personalizado salvo!');
-            // Preview
-            setTimeout(() => FCMModule.previewSound(), 300);
-        };
-        reader.readAsDataURL(file);
-    };
-    input.click();
-}
-
-function resetSoundToDefault() {
-    FCMModule.removeCustomSound();
-    if (typeof showToast === 'function') showToast('Som padrão restaurado');
 }
