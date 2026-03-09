@@ -654,6 +654,7 @@ function getFilteredOrders() {
             if (IdleDriver.isStoreDriver()) IdleDriver.transition('GO_OFFLINE');
         }
         renderAvailableOrders();
+        playNotificationSound();
         showToast(isOnline ? 'Você está online' : 'Você está offline');
     }
 
@@ -789,6 +790,7 @@ async function confirmAccept() {
             else if (!isOwnStore) IdleDriver.transition('APP_TRIP_ASSIGNED');
         }
 
+        playNotificationSound();
         closeModal('acceptModal');
         showToast('Entrega aceita');
         pendingAcceptOrder = null;
@@ -830,6 +832,7 @@ function closeModal(id) {
                 status: 'delivering', timeline,
                 pickedUpAt: firebase.firestore.FieldValue.serverTimestamp()
             });
+            playNotificationSound();
             showToast('Pedido retirado - Siga para o cliente');
         } catch (e) { console.error('Error starting delivery:', e); showToast('Erro ao iniciar entrega'); }
     }
@@ -893,6 +896,7 @@ function closeModal(id) {
             }
             Cache.remove('history');
             const earning = deliveryRef.driverEarning || platformConfig.driverFee;
+            playNotificationSound();
             closeModal('deliverModal');
             hideNavMapButton();
             showToast(`Entrega concluída +${formatCurrency(earning)}`);

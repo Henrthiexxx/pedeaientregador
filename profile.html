@@ -96,8 +96,6 @@
             <div class="profile-menu-item" onclick="requestNotificationPermission()"><span class="profile-menu-icon">🔔</span><span class="profile-menu-text">Ativar Notificações</span><span class="profile-menu-arrow">›</span></div>
             <div class="profile-menu-item" onclick="requestLocationPermission()"><span class="profile-menu-icon">◉</span><span class="profile-menu-text">Permissão de Localização</span><span class="profile-menu-arrow">›</span></div>
             <div class="profile-menu-item" onclick="triggerPhotoUpload()"><span class="profile-menu-icon">📷</span><span class="profile-menu-text">Alterar Foto</span><span class="profile-menu-arrow">›</span></div>
-            <div class="profile-menu-item" onclick="openSoundPicker()"><span class="profile-menu-icon">🔔</span><span class="profile-menu-text">Som de Notificação</span><span class="profile-menu-arrow">›</span></div>
-            <div class="profile-menu-item" onclick="resetSoundToDefault()"><span class="profile-menu-icon">↺</span><span class="profile-menu-text">Restaurar Som Padrão</span></div>
             <div class="profile-menu-item logout" onclick="handleLogout()"><span class="profile-menu-icon">→</span><span class="profile-menu-text">Sair</span><span class="profile-menu-arrow">›</span></div>
         </div>
 
@@ -254,30 +252,6 @@
             document.getElementById('emailConfirmPassword').value = '';
             showToast('E-mail alterado');
         } catch (e) { showToast('Erro ao alterar e-mail'); }
-    }
-
-    // ==================== SOUND ====================
-    function openSoundPicker() {
-        const input = document.createElement('input');
-        input.type = 'file'; input.accept = 'audio/*';
-        input.onchange = (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-            if (file.size > 1024 * 1024) { showToast('Max 1MB'); return; }
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-                localStorage.setItem('pedrad_notify_sound', ev.target.result);
-                showToast('Som salvo');
-                new Audio(ev.target.result).play().catch(() => {});
-            };
-            reader.readAsDataURL(file);
-        };
-        input.click();
-    }
-
-    function resetSoundToDefault() {
-        localStorage.removeItem('pedrad_notify_sound');
-        showToast('Som restaurado');
     }
 
     // ==================== PHOTO ====================
