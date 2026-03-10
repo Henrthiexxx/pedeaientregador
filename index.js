@@ -788,16 +788,13 @@ function updateStats() {
     var todayMoney = 0, todayDistance = 0;
     todayOrders.forEach(function(order) {
         var fee = order.driverEarning || getDeliveryFee(order.address?.neighborhood);
-        todayMoney += calculateDriverEarning(fee, order.distance);
-        todayDistance += order.distance || 3.5;
+        todayMoney += (calculateDriverEarning(fee, order.distance) || 0);
+        todayDistance += (order.distance || 3.5);
     });
 
-    var teEl = document.getElementById('todayEarnings');
-    if (teEl) teEl.textContent = formatCurrency(todayMoney);
-    var tdEl = document.getElementById('todayDeliveries');
-    if (tdEl) tdEl.textContent = todayOrders.length;
-    var tdiEl = document.getElementById('todayDistance');
-    if (tdiEl) tdiEl.textContent = todayDistance.toFixed(1) + ' km';
+    document.getElementById('todayEarnings').textContent = formatCurrency(todayMoney || 0);
+    document.getElementById('todayDeliveries').textContent = todayOrders.length;
+    document.getElementById('todayDistance').textContent = ((todayDistance || 0)).toFixed(1) + ' km';
 
     var weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
     var weekOrders = allHistory.filter(function(o) {
@@ -808,23 +805,16 @@ function updateStats() {
     var weekMoney = 0, weekDistance = 0;
     weekOrders.forEach(function(order) {
         var fee = order.driverEarning || getDeliveryFee(order.address?.neighborhood);
-        weekMoney += calculateDriverEarning(fee, order.distance);
-        weekDistance += order.distance || 3.5;
+        weekMoney += (calculateDriverEarning(fee, order.distance) || 0);
+        weekDistance += (order.distance || 3.5);
     });
 
-    var weEl = document.getElementById('weekEarningsTotal');
-    if (weEl) weEl.textContent = formatCurrency(weekMoney);
-    var wdEl = document.getElementById('weekDeliveriesCount');
-    if (wdEl) wdEl.textContent = weekOrders.length;
-    var wdiEl = document.getElementById('weekDistanceTotal');
-    if (wdiEl) wdiEl.textContent = weekDistance.toFixed(1) + ' km';
-    var whEl = document.getElementById('weekHoursTotal');
-    if (whEl) whEl.textContent = (weekOrders.length * 0.5).toFixed(0) + 'h';
-
-    var totalEl = document.getElementById('totalDeliveries');
-    if (totalEl) totalEl.textContent = allHistory.length;
+    document.getElementById('weekEarningsTotal').textContent = formatCurrency(weekMoney || 0);
+    document.getElementById('weekDeliveriesCount').textContent = weekOrders.length;
+    document.getElementById('weekDistanceTotal').textContent = ((weekDistance || 0)).toFixed(1) + ' km';
+    document.getElementById('weekHoursTotal').textContent = (weekOrders.length * 0.5).toFixed(0) + 'h';
+    document.getElementById('totalDeliveries').textContent = allHistory.length;
 }
-
 // ==================== ACTIONS ====================
 
 async function toggleOnline() {
@@ -1137,6 +1127,7 @@ function getDeliveryFee(neighborhood) {
 function calculateDriverEarning(baseFee, distance) {
     var kmBonus = (distance || 0) * (platformConfig.driverKmBonus || 1);
     return (baseFee || platformConfig.driverFee || 5) + kmBonus;
+    
 }
 
 function formatCurrency(value) {

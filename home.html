@@ -366,33 +366,33 @@
     }
 
     // ==================== FILTER (central) ====================
-function getFilteredOrders() {
-    if (!driverData) return [];
-    const myLinkedStores = new Set(driverData.linkedStores || []);
-    const isLinkedDriver = myLinkedStores.size > 0;
+    function getFilteredOrders() {
+        if (!driverData) return [];
+        const myLinkedStores = new Set(driverData.linkedStores || []);
+        const isLinkedDriver = myLinkedStores.size > 0;
 
-    return availableOrders.filter(o => {
-        const sid = o.storeId;
+        return availableOrders.filter(o => {
+            const sid = o.storeId;
 
-        // Driver vinculado com appEligible OFF → APENAS pedidos da própria loja
-        if (isLinkedDriver && driverData.appEligible !== true) {
-            return sid && myLinkedStores.has(sid);
-        }
+            // Driver vinculado com appEligible OFF → APENAS pedidos da própria loja
+            if (isLinkedDriver && driverData.appEligible !== true) {
+                return sid && myLinkedStores.has(sid);
+            }
 
-        // Driver vinculado com appEligible ON → própria loja + lojas sem cobertura + sem loja
-        if (isLinkedDriver) {
+            // Driver vinculado com appEligible ON → própria loja + lojas sem cobertura + sem loja
+            if (isLinkedDriver) {
+                if (!sid) return true;
+                if (myLinkedStores.has(sid)) return true;
+                if (!coveredStoreIds.has(sid)) return true;
+                return false;
+            }
+
+            // Driver livre (sem vínculo) → só lojas sem cobertura
             if (!sid) return true;
-            if (myLinkedStores.has(sid)) return true;
             if (!coveredStoreIds.has(sid)) return true;
             return false;
-        }
-
-        // Driver livre (sem vínculo) → só lojas sem cobertura
-        if (!sid) return true;
-        if (!coveredStoreIds.has(sid)) return true;
-        return false;
-    });
-}
+        });
+    }
 
     // ==================== RENDER ====================
     function renderAvailableOrders() {
@@ -625,12 +625,12 @@ function getFilteredOrders() {
             let money = 0, dist = 0;
             todayOrders.forEach(o => {
                 const fee = o.driverEarning || getDeliveryFee(o.address?.neighborhood);
-                money += calculateDriverEarning(fee, o.distance);
+                money += calculateDriverEarning(fee, o.distance) || 0;
                 dist  += o.distance || 3.5;
             });
-            document.getElementById('todayEarnings').textContent   = formatCurrency(money);
+            document.getElementById('todayEarnings').textContent   = formatCurrency(money || 0);
             document.getElementById('todayDeliveries').textContent  = todayOrders.length;
-            document.getElementById('todayDistance').textContent    = `${dist.toFixed(1)} km`;
+            document.getElementById('todayDistance').textContent    = `${((dist || 0)).toFixed(1)} km`;
         });
     }
 
@@ -654,7 +654,6 @@ function getFilteredOrders() {
             if (IdleDriver.isStoreDriver()) IdleDriver.transition('GO_OFFLINE');
         }
         renderAvailableOrders();
-        playNotificationSound();
         showToast(isOnline ? 'Você está online' : 'Você está offline');
     }
 
@@ -700,123 +699,122 @@ function getFilteredOrders() {
         openModal('acceptModal');
     }
 
-async function confirmAccept() {
-    if (!pendingAcceptOrder || !driverData) return;
+    async function confirmAccept() {
+        if (!pendingAcceptOrder || !driverData) return;
 
-    const sid = pendingAcceptOrder.storeId;
-    const myLinkedStores = new Set(driverData.linkedStores || []);
-    const isLinkedDriver = myLinkedStores.size > 0;
+        const sid = pendingAcceptOrder.storeId;
+        const myLinkedStores = new Set(driverData.linkedStores || []);
+        const isLinkedDriver = myLinkedStores.size > 0;
 
-    // Validação dupla: mesmo filtro do getFilteredOrders
-    if (isLinkedDriver && driverData.appEligible !== true) {
-        if (!sid || !myLinkedStores.has(sid)) {
+        // Validação dupla: mesmo filtro do getFilteredOrders
+        if (isLinkedDriver && driverData.appEligible !== true) {
+            if (!sid || !myLinkedStores.has(sid)) {
+                closeModal('acceptModal');
+                showToast('Sem permissão para aceitar este pedido');
+                return;
+            }
+        } else if (isLinkedDriver) {
+            if (sid && coveredStoreIds.has(sid) && !myLinkedStores.has(sid)) {
+                closeModal('acceptModal');
+                showToast('Sem permissão para aceitar este pedido');
+                return;
+            }
+        } else {
+            if (sid && coveredStoreIds.has(sid)) {
+                closeModal('acceptModal');
+                showToast('Sem permissão para aceitar este pedido');
+                return;
+            }
+        }
+
+        const isStoreDriverFlag = driverData.driverType === 'store' && driverData.storeId;
+        const isOwnStore        = isStoreDriverFlag && pendingAcceptOrder.storeId === driverData.storeId;
+        const maxOrders         = driverData.maxSimultaneousOrders || 1;
+        const myActive          = acceptedOrders.length + (currentDelivery ? 1 : 0);
+
+        if (!isOwnStore && myActive >= maxOrders) {
             closeModal('acceptModal');
-            showToast('Sem permissão para aceitar este pedido');
+            showToast('Limite de entregas simultâneas atingido');
             return;
         }
-    } else if (isLinkedDriver) {
-        if (sid && coveredStoreIds.has(sid) && !myLinkedStores.has(sid)) {
-            closeModal('acceptModal');
-            showToast('Sem permissão para aceitar este pedido');
-            return;
-        }
-    } else {
-        if (sid && coveredStoreIds.has(sid)) {
-            closeModal('acceptModal');
-            showToast('Sem permissão para aceitar este pedido');
-            return;
-        }
-    }
 
-    const isStoreDriverFlag = driverData.driverType === 'store' && driverData.storeId;
-    const isOwnStore        = isStoreDriverFlag && pendingAcceptOrder.storeId === driverData.storeId;
-    const maxOrders         = driverData.maxSimultaneousOrders || 1;
-    const myActive          = acceptedOrders.length + (currentDelivery ? 1 : 0);
+        // Desabilita botão durante operação
+        const confirmBtn = document.querySelector('#acceptModal .btn-primary');
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = 'Processando...';
 
-    if (!isOwnStore && myActive >= maxOrders) {
-        closeModal('acceptModal');
-        showToast('Limite de entregas simultâneas atingido');
-        return;
-    }
+        try {
+            await db.runTransaction(async (transaction) => {
+                const docRef = db.collection('orders').doc(pendingAcceptOrder.id);
+                const docSnap = await transaction.get(docRef);
+                
+                // Se outro driver pegou, falha a transação
+                if (docSnap.data().driverId) {
+                    throw new Error('ALREADY_ACCEPTED');
+                }
 
-    // Desabilita botão durante operação
-    const confirmBtn = document.querySelector('#acceptModal .btn-primary');
-    confirmBtn.disabled = true;
-    confirmBtn.textContent = 'Processando...';
+                const fee     = getDeliveryFee(pendingAcceptOrder.address?.neighborhood);
+                const earning = calculateDriverEarning(fee, pendingAcceptOrder.distance);
+                const timeline = pendingAcceptOrder.timeline || [];
+                timeline.push({
+                    status: 'accepted',
+                    timestamp: new Date().toISOString(),
+                    message: `Entregador ${driverData.name} aceitou`
+                });
 
-    try {
-        await db.runTransaction(async (transaction) => {
-            const docRef = db.collection('orders').doc(pendingAcceptOrder.id);
-            const docSnap = await transaction.get(docRef);
-            
-            // Se outro driver pegou, falha a transação
-            if (docSnap.data().driverId) {
-                throw new Error('ALREADY_ACCEPTED');
+                transaction.update(docRef, {
+                    driverId:      driverData.id,
+                    driverName:    driverData.name,
+                    driverPhone:   driverData.phone,
+                    driverVehicle: driverData.vehicle,
+                    driver: {
+                        id:            driverData.id,
+                        name:          driverData.name,
+                        phone:         driverData.phone,
+                        vehicle:       driverData.vehicle,
+                        photoUrl:      driverData.photoUrl || null,
+                        allowPhone:    driverData.allowPhone || false,
+                        allowWhatsapp: driverData.allowWhatsapp || false
+                    },
+                    driverEarning: earning,
+                    timeline,
+                    acceptedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+            });
+
+            // Sucesso na transação
+            if (IdleDriver.isStoreDriver()) {
+                if (isOwnStore && IdleDriver.state === 'COOLDOWN')    IdleDriver.transition('STORE_ORDER_IN_COOLDOWN');
+                else if (isOwnStore && IdleDriver.state === 'STORE_IDLE')  IdleDriver.transition('STORE_ORDER_ARRIVED');
+                else if (!isOwnStore) IdleDriver.transition('APP_TRIP_ASSIGNED');
             }
 
-            const fee     = getDeliveryFee(pendingAcceptOrder.address?.neighborhood);
-            const earning = calculateDriverEarning(fee, pendingAcceptOrder.distance);
-            const timeline = pendingAcceptOrder.timeline || [];
-            timeline.push({
-                status: 'accepted',
-                timestamp: new Date().toISOString(),
-                message: `Entregador ${driverData.name} aceitou`
-            });
+            closeModal('acceptModal');
+            showToast('Entrega aceita');
+            pendingAcceptOrder = null;
 
-            transaction.update(docRef, {
-                driverId:      driverData.id,
-                driverName:    driverData.name,
-                driverPhone:   driverData.phone,
-                driverVehicle: driverData.vehicle,
-                driver: {
-                    id:            driverData.id,
-                    name:          driverData.name,
-                    phone:         driverData.phone,
-                    vehicle:       driverData.vehicle,
-                    photoUrl:      driverData.photoUrl || null,
-                    allowPhone:    driverData.allowPhone || false,
-                    allowWhatsapp: driverData.allowWhatsapp || false
-                },
-                driverEarning: earning,
-                timeline,
-                acceptedAt: firebase.firestore.FieldValue.serverTimestamp()
-            });
-        });
-
-        // Sucesso na transação
-        if (IdleDriver.isStoreDriver()) {
-            if (isOwnStore && IdleDriver.state === 'COOLDOWN')    IdleDriver.transition('STORE_ORDER_IN_COOLDOWN');
-            else if (isOwnStore && IdleDriver.state === 'STORE_IDLE')  IdleDriver.transition('STORE_ORDER_ARRIVED');
-            else if (!isOwnStore) IdleDriver.transition('APP_TRIP_ASSIGNED');
+        } catch (e) {
+            if (e.message === 'ALREADY_ACCEPTED') {
+                showToast('Outro entregador pegou essa entrega');
+            } else {
+                console.error('Error accepting:', e);
+                showToast('Erro ao aceitar entrega');
+            }
+        } finally {
+            confirmBtn.disabled = false;
+            confirmBtn.textContent = 'Aceitar';
         }
-
-        playNotificationSound();
-        closeModal('acceptModal');
-        showToast('Entrega aceita');
-        pendingAcceptOrder = null;
-
-    } catch (e) {
-        if (e.message === 'ALREADY_ACCEPTED') {
-            showToast('Outro entregador pegou essa entrega');
-        } else {
-            console.error('Error accepting:', e);
-            showToast('Erro ao aceitar entrega');
-        }
-    } finally {
-        confirmBtn.disabled = false;
-        confirmBtn.textContent = 'Aceitar';
     }
-}
 
-function openModal(id) {
-    document.getElementById(id).classList.add('active');
-}
+    function openModal(id) {
+        document.getElementById(id).classList.add('active');
+    }
 
-function closeModal(id) {
-    document.getElementById(id).classList.remove('active');
-}
-// ==================== START DELIVERY ====================
-   
+    function closeModal(id) {
+        document.getElementById(id).classList.remove('active');
+    }
+
+    // ==================== START DELIVERY ====================
     function startDelivery(orderId) {
         const order = acceptedOrders.find(o => o.id === orderId);
         if (!order) return;
@@ -832,7 +830,6 @@ function closeModal(id) {
                 status: 'delivering', timeline,
                 pickedUpAt: firebase.firestore.FieldValue.serverTimestamp()
             });
-            playNotificationSound();
             showToast('Pedido retirado - Siga para o cliente');
         } catch (e) { console.error('Error starting delivery:', e); showToast('Erro ao iniciar entrega'); }
     }
@@ -896,7 +893,6 @@ function closeModal(id) {
             }
             Cache.remove('history');
             const earning = deliveryRef.driverEarning || platformConfig.driverFee;
-            playNotificationSound();
             closeModal('deliverModal');
             hideNavMapButton();
             showToast(`Entrega concluída +${formatCurrency(earning)}`);
