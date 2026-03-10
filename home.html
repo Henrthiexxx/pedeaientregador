@@ -162,6 +162,15 @@
     // ==================== ALERT SOUND SYSTEM ====================
     let alertAudio = null;
     let alertInterval = null;
+    // Desbloqueia áudio no primeiro toque (exigência mobile)
+let audioUnlocked = false;
+document.addEventListener('touchstart', function unlockAudio() {
+    if (audioUnlocked) return;
+    const a = new Audio('notify.mp3');
+    a.volume = 0;
+    a.play().then(() => { a.pause(); audioUnlocked = true; }).catch(() => {});
+    document.removeEventListener('touchstart', unlockAudio);
+}, { once: true });
 
     function startAlertLoop() {
         if (alertAudio) return;
@@ -188,6 +197,7 @@
         } catch(e) {}
     }
 
+        
     // ==================== INIT ====================
 
     
