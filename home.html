@@ -189,12 +189,7 @@
     }
 
     // ==================== INIT ====================
-    // Cola no console ou no init temporariamente
-navigator.serviceWorker.getRegistrations().then(regs => {
-    regs.forEach(r => r.unregister());
-    caches.keys().then(keys => keys.forEach(k => caches.delete(k)));
-    console.log('SW e caches limpos — recarregue a página');
-});
+
     
     document.addEventListener('DOMContentLoaded', async () => {
         const ok = await checkAuth();
