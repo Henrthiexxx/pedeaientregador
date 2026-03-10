@@ -1,7 +1,7 @@
 /* ==================== PEDRAD SERVICE WORKER (CACHE + FCM) ==================== */
 /* ÚNICO SW por scope: PWA cache + Firebase Messaging */
 
-const CACHE_VERSION = 3;
+const CACHE_VERSION = 4;
 const CACHE_NAME = 'pedrad-v' + CACHE_VERSION;
 
 // Descobre base do app pelo scope do SW (ex.: /pedeaientregador/)
