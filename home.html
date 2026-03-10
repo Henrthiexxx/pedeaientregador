@@ -6,11 +6,11 @@
     <title>Pedrad - Início</title>
     <meta name="theme-color" content="#000000">
 
-        <script>
+    <script>
         window.BASE_PATH = location.pathname.substring(0, location.pathname.lastIndexOf('/') + 1);
         console.log('Base path:', window.BASE_PATH);
     </script>
-    <link rel="stylesheet" href="index.css">
+    <link rel="stylesheet" href="./index.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 </head>
 <body>
@@ -139,11 +139,11 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="modules/cache.js"></script>
-    <script src="modules/firebase-init.js"></script>
-    <script src="modules/shared.js"></script>
-    <script src="modules/idle.js"></script>
-    <script src="modules/fcm.js"></script>
+    <script src="./modules/cache.js"></script>
+    <script src="./modules/firebase-init.js"></script>
+    <script src="./modules/shared.js"></script>
+    <script src="./modules/idle.js"></script>
+    <script src="./modules/fcm.js"></script>
     <script>
     // ==================== STATE ====================
     let isOnline = false;
@@ -158,6 +158,35 @@
     let lastLocationUpdate = 0;
     let navMap = null;
     let coveredStoreIds = new Set();
+
+    // ==================== ALERT SOUND SYSTEM ====================
+    let alertAudio = null;
+    let alertInterval = null;
+
+    function startAlertLoop() {
+        if (alertAudio) return;
+        try {
+            alertAudio = new Audio('notify.mp3');
+            alertAudio.loop = true;
+            alertAudio.play().catch(() => {});
+            if ('vibrate' in navigator) {
+                alertInterval = setInterval(() => navigator.vibrate([300, 200, 300]), 4000);
+            }
+        } catch(e) {}
+    }
+
+    function stopAlertLoop() {
+        if (alertAudio) { alertAudio.pause(); alertAudio.currentTime = 0; alertAudio = null; }
+        if (alertInterval) { clearInterval(alertInterval); alertInterval = null; }
+    }
+
+    function playNotificationSound() {
+        try {
+            const a = new Audio('notify.mp3');
+            a.play().catch(() => {});
+            if ('vibrate' in navigator) navigator.vibrate([200, 100, 200]);
+        } catch(e) {}
+    }
 
     // ==================== INIT ====================
     document.addEventListener('DOMContentLoaded', async () => {
@@ -174,14 +203,11 @@
 
         await loadSharedData();
 
-        // FIX: Leitura fresh do driverData — shared.js pode retornar cache desatualizado
-        // sem isso driverData.appEligible pode estar errado desde o início
         const freshDoc = await db.collection('drivers').doc(driverData.id).get();
         if (freshDoc.exists) Object.assign(driverData, freshDoc.data());
 
         updateDriverCard();
 
-        // Coverage carregado ANTES de qualquer render — sem delay, sem janela para bots
         const driversSnap = await db.collection('drivers').get();
         coveredStoreIds = new Set();
         driversSnap.docs.forEach(doc => {
@@ -287,8 +313,6 @@
 
     // ==================== REALTIME LISTENERS ====================
     function setupListeners() {
-        // FIX: SEM .get() aqui — coverage já foi carregado no init de forma síncrona.
-        // Apenas listener contínuo para manter atualizado após mudanças.
         db.collection('drivers').onSnapshot(snapshot => {
             coveredStoreIds = new Set();
             snapshot.docs.forEach(doc => {
@@ -297,7 +321,6 @@
             renderAvailableOrders();
         });
 
-        // Pedidos disponíveis
         if (window._unsubAvailable) window._unsubAvailable();
         window._unsubAvailable = db.collection('orders')
             .where('status', 'in', ['preparing', 'ready'])
@@ -318,8 +341,10 @@
 
                 const nowVisible = getFilteredOrders().length;
                 if (nowVisible > prevVisible && isOnline && !currentDelivery) {
-                    playNotificationSound();
+                    startAlertLoop();
                     showToast('Nova entrega disponível');
+                } else if (nowVisible === 0) {
+                    stopAlertLoop();
                 }
             });
 
@@ -346,8 +371,6 @@
                     updateStats();
                 });
 
-            // FIX: Object.assign garante que driverData.appEligible fica sempre atualizado
-            // Sem isso, mudanças feitas pelo admin no Firestore não refletem no filtro
             setupDriverListener((newData, oldData) => {
                 Object.assign(driverData, newData);
                 updateDriverCard();
@@ -374,12 +397,10 @@
         return availableOrders.filter(o => {
             const sid = o.storeId;
 
-            // Driver vinculado com appEligible OFF → APENAS pedidos da própria loja
             if (isLinkedDriver && driverData.appEligible !== true) {
                 return sid && myLinkedStores.has(sid);
             }
 
-            // Driver vinculado com appEligible ON → própria loja + lojas sem cobertura + sem loja
             if (isLinkedDriver) {
                 if (!sid) return true;
                 if (myLinkedStores.has(sid)) return true;
@@ -387,7 +408,6 @@
                 return false;
             }
 
-            // Driver livre (sem vínculo) → só lojas sem cobertura
             if (!sid) return true;
             if (!coveredStoreIds.has(sid)) return true;
             return false;
@@ -651,6 +671,7 @@
             if (IdleDriver.isStoreDriver()) IdleDriver.transition('GO_ONLINE');
         } else {
             stopOnlineHeartbeat();
+            stopAlertLoop();
             if (IdleDriver.isStoreDriver()) IdleDriver.transition('GO_OFFLINE');
         }
         renderAvailableOrders();
@@ -706,7 +727,6 @@
         const myLinkedStores = new Set(driverData.linkedStores || []);
         const isLinkedDriver = myLinkedStores.size > 0;
 
-        // Validação dupla: mesmo filtro do getFilteredOrders
         if (isLinkedDriver && driverData.appEligible !== true) {
             if (!sid || !myLinkedStores.has(sid)) {
                 closeModal('acceptModal');
@@ -738,7 +758,6 @@
             return;
         }
 
-        // Desabilita botão durante operação
         const confirmBtn = document.querySelector('#acceptModal .btn-primary');
         confirmBtn.disabled = true;
         confirmBtn.textContent = 'Processando...';
@@ -748,7 +767,6 @@
                 const docRef = db.collection('orders').doc(pendingAcceptOrder.id);
                 const docSnap = await transaction.get(docRef);
                 
-                // Se outro driver pegou, falha a transação
                 if (docSnap.data().driverId) {
                     throw new Error('ALREADY_ACCEPTED');
                 }
@@ -782,7 +800,8 @@
                 });
             });
 
-            // Sucesso na transação
+            stopAlertLoop();
+
             if (IdleDriver.isStoreDriver()) {
                 if (isOwnStore && IdleDriver.state === 'COOLDOWN')    IdleDriver.transition('STORE_ORDER_IN_COOLDOWN');
                 else if (isOwnStore && IdleDriver.state === 'STORE_IDLE')  IdleDriver.transition('STORE_ORDER_ARRIVED');

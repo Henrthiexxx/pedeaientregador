@@ -91,9 +91,8 @@ self.addEventListener('fetch', (event) => {
 });
 
 // ---------- FIREBASE FCM (v8 CDN) ----------
-importScripts('https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js');
-importScripts('https://www.gstatic.com/firebasejs/8.10.1/firebase-messaging.js');
-
+importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js');
 // COLE A MESMA CONFIG DO SEU PROJETO FIREBASE AQUI:
 const firebaseConfig = {
     apiKey: "AIzaSyAnIJRcUxN-0swpVnonPbJjTSK87o4CQ_g",
@@ -115,7 +114,7 @@ try {
     messaging = firebase.messaging();
 
     // Background message (v8)
-    messaging.setBackgroundMessageHandler(function(payload) {
+    messaging.onBackgroundMessage(function(payload) {
         const data = payload?.data || {};
         const notif = payload?.notification || {};
         const type = data.type || 'order_status';
