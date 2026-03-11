@@ -162,16 +162,7 @@
     // ==================== ALERT SOUND SYSTEM ====================
     let alertAudio = null;
     let alertInterval = null;
-    // Desbloqueia áudio no primeiro toque (exigência mobile)
-let audioUnlocked = false;
-document.addEventListener('touchstart', function unlockAudio() {
-    if (audioUnlocked) return;
-    const a = new Audio('notify.mp3');
-    a.volume = 0;
-    a.play().then(() => { a.pause(); audioUnlocked = true; }).catch(() => {});
-    document.removeEventListener('touchstart', unlockAudio);
-}, { once: true });
-
+    
     function startAlertLoop() {
         if (alertAudio) return;
         try {
@@ -197,10 +188,7 @@ document.addEventListener('touchstart', function unlockAudio() {
         } catch(e) {}
     }
 
-        
     // ==================== INIT ====================
-
-    
     document.addEventListener('DOMContentLoaded', async () => {
         const ok = await checkAuth();
         if (!ok) return;
@@ -219,6 +207,7 @@ document.addEventListener('touchstart', function unlockAudio() {
         if (freshDoc.exists) Object.assign(driverData, freshDoc.data());
 
         updateDriverCard();
+        if (window.Android) Android.setDriverId(driverData.id);
 
         const driversSnap = await db.collection('drivers').get();
         coveredStoreIds = new Set();
