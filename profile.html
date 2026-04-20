@@ -159,13 +159,6 @@
     .btn-action:hover::before{left:100%}
     .btn-action:active{transform:translateY(0) scale(.98)}
 
-    /* ── Theme switcher ── */
-    .theme-opt{
-        transition:all .2s ease!important;
-        box-shadow:inset 0 1px 0 rgba(255,255,255,.04),0 1px 2px rgba(0,0,0,.1);
-    }
-    .theme-opt:hover{transform:translateY(-1px);box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 4px 10px rgba(0,0,0,.2)}
-    .theme-opt.active{box-shadow:inset 0 2px 4px rgba(0,0,0,.2)}
 
     /* ── Header top ── */
     .header{
@@ -308,7 +301,13 @@
     // ── Theme ──
     function getTheme(){return localStorage.getItem('pedrad-theme')||'dark'}
 function applyTheme(t){
-    document.documentElement.setAttribute('data-theme',t);
+    const html=document.documentElement;
+    html.setAttribute('data-theme',t);
+    // força repaint (WebView Android)
+    html.style.display='none';
+    void html.offsetHeight;
+    html.style.display='';
+
     const seg=document.querySelector('.theme-segmented');
     if(seg)seg.dataset.active=t;
     document.getElementById('themeDark').classList.toggle('active',t==='dark');
