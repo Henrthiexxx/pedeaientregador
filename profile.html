@@ -9,6 +9,35 @@
     <link rel="stylesheet" href="index.css">
     <script src="modules/driver-auth.js"></script>
     <style>
+
+        .theme-segmented{
+    position:relative;display:flex;margin:12px 14px;
+    background:var(--bg-input);border:1px solid var(--border);
+    border-radius:12px;padding:4px;
+    box-shadow:inset 0 2px 6px rgba(0,0,0,.22),0 1px 2px rgba(0,0,0,.1);
+}
+.theme-seg-indicator{
+    position:absolute;top:4px;bottom:4px;left:4px;
+    width:calc(50% - 4px);
+    background:linear-gradient(145deg,var(--primary),color-mix(in srgb,var(--primary) 82%,#000));
+    border-radius:9px;
+    transition:transform .32s cubic-bezier(.34,1.56,.64,1);
+    box-shadow:0 4px 14px color-mix(in srgb,var(--primary) 38%,transparent),inset 0 1px 0 rgba(255,255,255,.2),inset 0 -1px 0 rgba(0,0,0,.15);
+    pointer-events:none;
+}
+.theme-segmented[data-active="light"] .theme-seg-indicator{transform:translateX(100%)}
+.theme-seg-btn{
+    flex:1;display:flex;align-items:center;justify-content:center;gap:8px;
+    padding:13px 14px;min-height:46px;
+    border:none;background:transparent;
+    color:var(--text-muted);font-size:.84rem;font-weight:600;
+    cursor:pointer;position:relative;z-index:1;font-family:inherit;
+    letter-spacing:.3px;transition:color .3s ease,transform .15s ease;
+    -webkit-tap-highlight-color:transparent;
+}
+.theme-seg-btn.active{color:#000}
+.theme-seg-btn:active{transform:scale(.97)}
+.theme-seg-ico{font-size:1.05rem;line-height:1}
     body{position:relative;overflow-x:hidden}
 
     /* ── Ondas de fundo ── */
@@ -236,15 +265,15 @@
         <!-- ── 8. Aparência ── -->
         <div class="profile-section">
             <div class="profile-section-title">Aparência</div>
-            <div class="theme-row">
-                <span class="profile-item-icon">◐</span>
-                <span class="theme-label">Tema</span>
-                <div class="theme-options">
-                    <div class="theme-opt" id="themeDark" onclick="setTheme('dark')" title="Escuro">◐</div>
-                    <div class="theme-opt" id="themeLight" onclick="setTheme('light')" title="Claro">☀</div>
-                </div>
-            </div>
-        </div>
+<div class="theme-segmented" data-active="dark">
+    <div class="theme-seg-indicator"></div>
+    <button class="theme-seg-btn" id="themeDark" onclick="setTheme('dark')">
+        <span class="theme-seg-ico">◐</span><span>Escuro</span>
+    </button>
+    <button class="theme-seg-btn" id="themeLight" onclick="setTheme('light')">
+        <span class="theme-seg-ico">☀</span><span>Claro</span>
+    </button>
+</div>
 
         <!-- ── 9. Sessão ── -->
         <div class="profile-section">
@@ -278,13 +307,15 @@
     <script>
     // ── Theme ──
     function getTheme(){return localStorage.getItem('pedrad-theme')||'dark'}
-    function applyTheme(t){
-        document.documentElement.setAttribute('data-theme',t);
-        document.getElementById('themeDark').classList.toggle('active',t==='dark');
-        document.getElementById('themeLight').classList.toggle('active',t==='light');
-        const meta=document.querySelector('meta[name="theme-color"]');
-        if(meta)meta.setAttribute('content',t==='light'?'#f5f5f7':'#0a0a0c');
-    }
+function applyTheme(t){
+    document.documentElement.setAttribute('data-theme',t);
+    const seg=document.querySelector('.theme-segmented');
+    if(seg)seg.dataset.active=t;
+    document.getElementById('themeDark').classList.toggle('active',t==='dark');
+    document.getElementById('themeLight').classList.toggle('active',t==='light');
+    const meta=document.querySelector('meta[name="theme-color"]');
+    if(meta)meta.setAttribute('content',t==='light'?'#f5f5f7':'#0a0a0c');
+}
     function setTheme(t){localStorage.setItem('pedrad-theme',t);applyTheme(t)}
     applyTheme(getTheme());
 
