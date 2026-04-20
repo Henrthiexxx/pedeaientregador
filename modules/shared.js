@@ -1,9 +1,80 @@
 // ==================== SHARED UTILITIES ====================
 
-let driverData = null;
-let platformConfig = { driverFee: 5, driverKmBonus: 1 };
+let platformConfig = { driverFee: 5, driverKmBonus: 0 };
 let deliveryFees = [];
 let storesCache = {};
+
+// ==================== DRIVER ROUTING HELPERS ====================
+
+function uniqueStrings(list) {
+    return [...new Set((Array.isArray(list) ? list : []).filter(Boolean).map(v => String(v)))];
+}
+
+function sameStringArray(a, b) {
+    const aa = uniqueStrings(a);
+    const bb = uniqueStrings(b);
+    return aa.length === bb.length && aa.every((v, i) => v === bb[i]);
+}
+
+function getDriverLinkedStoreIds(driver) {
+    return uniqueStrings([
+        driver?.linkedStoreId,
+        driver?.storeId,
+        ...(Array.isArray(driver?.linkedStores) ? driver.linkedStores : [])
+    ]);
+}
+
+function getDriverPrimaryStoreId(driver) {
+    return getDriverLinkedStoreIds(driver)[0] || null;
+}
+
+function isStoreBoundDriver(driver) {
+    return getDriverLinkedStoreIds(driver).length > 0;
+}
+
+function getDriverDeliveryPool(driver) {
+    return isStoreBoundDriver(driver) ? 'store' : 'app';
+}
+
+function normalizeDriverData(driver) {
+    const routingStoreIds = getDriverLinkedStoreIds(driver);
+    const primaryStoreId = routingStoreIds[0] || null;
+    const deliveryPool = routingStoreIds.length ? 'store' : 'app';
+
+    return {
+        ...(driver || {}),
+        routingStoreIds,
+        primaryStoreId,
+        deliveryPool
+    };
+}
+
+async function syncDriverRoutingMeta(driver) {
+    if (!driver?.id) return;
+
+    const normalized = normalizeDriverData(driver);
+    const patch = {};
+
+    if ((driver.deliveryPool || null) !== normalized.deliveryPool) {
+        patch.deliveryPool = normalized.deliveryPool;
+    }
+
+    if ((driver.primaryStoreId || null) !== (normalized.primaryStoreId || null)) {
+        patch.primaryStoreId = normalized.primaryStoreId || null;
+    }
+
+    if (!sameStringArray(driver.routingStoreIds, normalized.routingStoreIds)) {
+        patch.routingStoreIds = normalized.routingStoreIds;
+    }
+
+    if (Object.keys(patch).length === 0) return;
+
+    try {
+        await db.collection('drivers').doc(driver.id).update(patch);
+    } catch (e) {
+        console.error('Error syncing driver routing meta:', e);
+    }
+}
 
 // ==================== AUTH CHECK ====================
 
@@ -14,19 +85,20 @@ async function checkAuth() {
         return false;
     }
 
-    // Try cache first
     const cached = Cache.getDriver();
     if (cached) {
-        driverData = cached;
+        driverData = normalizeDriverData(cached);
+        Cache.setDriver(driverData);
+        syncDriverRoutingMeta(driverData).catch(() => {});
         return true;
     }
 
-    // Fetch from Firestore
     try {
         const doc = await db.collection('drivers').doc(driverId).get();
         if (doc.exists && doc.data().status !== 'blocked') {
-            driverData = { id: doc.id, ...doc.data() };
+            driverData = normalizeDriverData({ id: doc.id, ...doc.data() });
             Cache.setDriver(driverData);
+            syncDriverRoutingMeta(driverData).catch(() => {});
             return true;
         }
     } catch (e) {
@@ -75,10 +147,8 @@ async function loadPlatformConfig() {
 async function getStoreData(storeId) {
     if (!storeId) return null;
 
-    // Memory cache
     if (storesCache[storeId]) return storesCache[storeId];
 
-    // localStorage cache
     const cached = Cache.getStore(storeId);
     if (cached) {
         storesCache[storeId] = cached;
@@ -107,21 +177,26 @@ async function loadSharedData() {
 
 function setupDriverListener(onChange) {
     if (!driverData) return;
+
     return db.collection('drivers').doc(driverData.id).onSnapshot(doc => {
-        if (doc.exists) {
-            const old = driverData;
-            driverData = { id: doc.id, ...doc.data() };
-            Cache.setDriver(driverData);
+        if (!doc.exists) return;
 
-            if (driverData.status === 'blocked') {
-                showToast('Sua conta foi bloqueada');
-                Cache.clearAll();
-                window.location.href = 'index.html';
-                return;
-            }
+        const old = driverData;
+        const next = normalizeDriverData({ id: doc.id, ...doc.data() });
 
-            if (onChange) onChange(driverData, old);
+        driverData = next;
+        Cache.setDriver(driverData);
+
+        if (driverData.status === 'blocked') {
+            showToast('Sua conta foi bloqueada');
+            Cache.clearAll();
+            window.location.href = 'index.html';
+            return;
         }
+
+        syncDriverRoutingMeta(driverData).catch(() => {});
+
+        if (onChange) onChange(driverData, old);
     });
 }
 
@@ -216,17 +291,15 @@ function renderBottomNav(activePage) {
 // ==================== NOTIFICATION SOUND ====================
 
 function playNotificationSound() {
-    // Vibração sempre
     if ('vibrate' in navigator) {
         navigator.vibrate([200, 100, 200]);
     }
-    
+
     try {
-        // Tenta com BASE_PATH se disponível
-        const basePath = (typeof window.BASE_PATH !== 'undefined') 
-            ? window.BASE_PATH 
+        const basePath = (typeof window.BASE_PATH !== 'undefined')
+            ? window.BASE_PATH
             : location.pathname.substring(0, location.pathname.lastIndexOf('/') + 1);
-        
+
         const audio = new Audio(basePath + 'notify.mp3');
         audio.volume = 1.0;
         audio.play().catch(() => playGeneratedSound());
@@ -236,20 +309,19 @@ function playNotificationSound() {
 }
 
 function playGeneratedSound() {
-    // Web Audio API fallback - som de notificação
     try {
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
-        
+
         osc.connect(gain);
         gain.connect(ctx.destination);
         osc.frequency.value = 800;
         osc.type = 'sine';
-        
+
         gain.gain.setValueAtTime(0.3, ctx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
-        
+
         osc.start(ctx.currentTime);
         osc.stop(ctx.currentTime + 0.2);
     } catch (e) {}

@@ -8,43 +8,43 @@ const IdleDriver = {
     listener: null,
     cooldownTimer: null,
 
-    // Check if driver is a store driver
     isStoreDriver() {
-        return driverData?.driverType === 'store' && driverData?.storeId;
+        if (typeof isStoreBoundDriver === 'function') {
+            return isStoreBoundDriver(driverData);
+        }
+        return !!driverData?.storeId;
     },
 
-    // Initialize the idle system
     async init() {
         if (!this.isStoreDriver()) return;
 
-        // Load store idle config
         await this.loadStoreConfig();
 
-        // Restore state from cache
         const cached = Cache.getIdleState();
         if (cached) {
             this.state = cached.state || 'OFFLINE';
             this.cooldownUntil = cached.cooldownUntil ? new Date(cached.cooldownUntil) : null;
         }
 
-        // Listen for state changes from Firestore
         this.setupListener();
-
-        // Check cooldown expiry
         this.checkCooldown();
     },
 
     async loadStoreConfig() {
-        if (!driverData?.storeId) return;
+        const storeId = (typeof getDriverPrimaryStoreId === 'function')
+            ? getDriverPrimaryStoreId(driverData)
+            : (driverData?.storeId || null);
 
-        const cached = Cache.get('idle_config_' + driverData.storeId);
+        if (!storeId) return;
+
+        const cached = Cache.get('idle_config_' + storeId);
         if (cached) {
             this.storeConfig = cached;
             return;
         }
 
         try {
-            const doc = await db.collection('stores').doc(driverData.storeId).get();
+            const doc = await db.collection('stores').doc(storeId).get();
             if (doc.exists) {
                 const store = doc.data();
                 this.storeConfig = {
@@ -56,7 +56,7 @@ const IdleDriver = {
                     priority_mode: store.idleConfig?.priority_mode || 'FAIR',
                     enabled: store.idleConfig?.enabled || false
                 };
-                Cache.set('idle_config_' + driverData.storeId, this.storeConfig, 60);
+                Cache.set('idle_config_' + storeId, this.storeConfig, 60);
             }
         } catch (e) {
             console.error('Error loading idle config:', e);
@@ -68,10 +68,10 @@ const IdleDriver = {
         this.listener = db.collection('drivers').doc(driverData.id).onSnapshot(doc => {
             if (!doc.exists) return;
             const data = doc.data();
-            
+
             if (data.idleState && data.idleState !== this.state) {
                 this.state = data.idleState;
-                this.cooldownUntil = data.cooldownUntil?.toDate?.() || 
+                this.cooldownUntil = data.cooldownUntil?.toDate?.() ||
                     (data.cooldownUntil ? new Date(data.cooldownUntil) : null);
                 this.saveState();
                 this.onStateChange();
@@ -107,7 +107,6 @@ const IdleDriver = {
                     next = 'OFFLINE';
                     actions.push('setIneligible');
                 }
-                // R2: Pedido da loja vinculada chegou → sair do ocioso
                 if (event === 'STORE_ORDER_ARRIVED') {
                     next = 'STORE_ACTIVE';
                     actions.push('setIneligible');
@@ -130,7 +129,6 @@ const IdleDriver = {
                     next = 'OFFLINE';
                     actions.push('setIneligible');
                 }
-                // R6: Pedido da loja vinculada durante cooldown → reiniciar cooldown
                 if (event === 'STORE_ORDER_IN_COOLDOWN') {
                     next = 'COOLDOWN';
                     actions.push('restartCooldown');
@@ -142,7 +140,6 @@ const IdleDriver = {
                     next = 'COOLDOWN';
                     actions.push('setCooldown', 'setIneligible');
                 }
-                // Entrega da loja finalizada sem cooldown pendente
                 if (event === 'STORE_DELIVERY_DONE') {
                     next = this.isCooldownActive() ? 'COOLDOWN' : 'STORE_IDLE';
                     if (next === 'STORE_IDLE') actions.push('setEligible');
@@ -160,7 +157,6 @@ const IdleDriver = {
             return false;
         }
 
-        // Execute actions
         for (const action of actions) {
             await this.executeAction(action);
         }
@@ -182,7 +178,6 @@ const IdleDriver = {
                 break;
             }
             case 'restartCooldown': {
-                // R6: reiniciar cooldown mantendo bloqueio
                 const mins = this.storeConfig?.cooldown_minutes || 30;
                 this.cooldownUntil = new Date(Date.now() + mins * 60000);
                 break;
@@ -198,10 +193,13 @@ const IdleDriver = {
 
     async updateEligibility(eligible) {
         if (!driverData) return;
+
+        const finalEligible = this.isStoreDriver() ? false : !!eligible;
+
         try {
             await db.collection('drivers').doc(driverData.id).update({
-                appEligible: eligible,
-                eligibleSince: eligible ? firebase.firestore.FieldValue.serverTimestamp() : null
+                appEligible: finalEligible,
+                eligibleSince: finalEligible ? firebase.firestore.FieldValue.serverTimestamp() : null
             });
         } catch (e) {
             console.error('Error updating eligibility:', e);
@@ -223,10 +221,11 @@ const IdleDriver = {
 
             await db.collection('drivers').doc(driverData.id).update(update);
 
-            // Audit log
             await db.collection('idleAuditLog').add({
                 driverId: driverData.id,
-                storeId: driverData.storeId,
+                storeId: (typeof getDriverPrimaryStoreId === 'function')
+                    ? getDriverPrimaryStoreId(driverData)
+                    : (driverData.storeId || null),
                 event,
                 from,
                 to,
@@ -256,18 +255,14 @@ const IdleDriver = {
             if (this.state === 'COOLDOWN' && !this.isCooldownActive()) {
                 this.transition('COOLDOWN_EXPIRED');
             }
-            this.onStateChange(); // Update UI timer
+            this.onStateChange();
         }, 10000);
     },
 
-    // ==================== ELIGIBILITY CHECK ====================
+    // ==================== ELIGIBILITY ====================
 
     isEligibleForAppTrips() {
-        if (!this.isStoreDriver()) return false;
-        if (!this.storeConfig?.enabled) return false;
-        if (this.state !== 'STORE_IDLE') return false;
-        if (this.isCooldownActive()) return false;
-        return true;
+        return false;
     },
 
     // ==================== STORE TRIP EVENTS ====================
@@ -311,7 +306,6 @@ const IdleDriver = {
         return colors[this.state] || '#737373';
     },
 
-    // Override this in the page for UI updates
     onStateChange() {},
 
     destroy() {

@@ -12,7 +12,6 @@ const FCMModule = {
             return false;
         }
         try {
-            // Detecta path automaticamente baseado na URL atual
             const basePath = location.pathname.substring(0, location.pathname.lastIndexOf('/') + 1);
             this.swReg = await navigator.serviceWorker.register(basePath + 'firebase-messaging-sw.js', {
                 scope: basePath
@@ -68,12 +67,29 @@ const FCMModule = {
 
     async saveTokenToFirestore(userId, userType = 'customer') {
         if (!this.token || !userId) return;
+
         const col = this.getCollection(userType);
+        const payload = {
+            fcmTokens: firebase.firestore.FieldValue.arrayUnion(this.token),
+            lastTokenUpdate: firebase.firestore.FieldValue.serverTimestamp()
+        };
+
+        if (
+            userType === 'driver' &&
+            typeof normalizeDriverData === 'function' &&
+            typeof driverData !== 'undefined' &&
+            driverData &&
+            driverData.id === userId
+        ) {
+            const normalized = normalizeDriverData(driverData);
+            payload.deliveryPool = normalized.deliveryPool;
+            payload.primaryStoreId = normalized.primaryStoreId || null;
+            payload.routingStoreIds = normalized.routingStoreIds || [];
+            payload.pushRoutingUpdatedAt = firebase.firestore.FieldValue.serverTimestamp();
+        }
+
         try {
-            await db.collection(col).doc(userId).set({
-                fcmTokens: firebase.firestore.FieldValue.arrayUnion(this.token),
-                lastTokenUpdate: firebase.firestore.FieldValue.serverTimestamp()
-            }, { merge: true });
+            await db.collection(col).doc(userId).set(payload, { merge: true });
         } catch (err) {
             console.error('Erro salvar token:', err);
         }
@@ -95,7 +111,6 @@ const FCMModule = {
         const notif = payload.notification || {};
         const type = data.type || 'order_status';
 
-        // Monta mensagem baseada no tipo
         const messages = {
             new_order: {
                 title: '📦 Nova Entrega!',
@@ -133,20 +148,16 @@ const FCMModule = {
         const title = notif.title || msg.title;
         const body = notif.body || msg.body;
 
-        // Toast no app
         if (typeof showToast === 'function') {
             showToast(body);
         }
 
-        // Som (notify.mp3 padrão obrigatório)
         playNotificationSound();
 
-        // Vibração
         if (navigator.vibrate) {
             navigator.vibrate(msg.urgent ? [300, 100, 300, 100, 300] : [200, 100, 200]);
         }
 
-        // Notificação do sistema (foreground)
         if (Notification.permission === 'granted') {
             new Notification(title, {
                 body,
@@ -158,9 +169,7 @@ const FCMModule = {
     },
 
     handleNotificationClick(data) {
-        // Quando usuário clica na notificação e app já está aberto
         if (data.type === 'new_order') {
-            // Scroll para pedidos disponíveis
             const el = document.getElementById('availableSection');
             if (el) el.scrollIntoView({ behavior: 'smooth' });
         }
