@@ -5,37 +5,149 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Pedrad - Perfil</title>
     <meta name="theme-color" content="#000000">
+    <script>(function(){var t=localStorage.getItem("pedrad-theme")||"dark";document.documentElement.setAttribute("data-theme",t)})();</script>
     <link rel="stylesheet" href="index.css">
+    <script src="modules/driver-auth.js"></script>
     <style>
-    .collapsible-section { padding: 0 14px 14px; }
-    .section-form { display: flex; flex-direction: column; gap: 12px; }
-    .form-label-sm { font-size: .72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .8px; }
-    .form-input-sm {
-        width: 100%; padding: 12px; border-radius: 8px;
-        border: 1px solid var(--border); background: var(--bg-input);
-        color: var(--text); font-size: .9rem;
+    body{position:relative;overflow-x:hidden}
+
+    /* ── Ondas de fundo ── */
+    .bg-waves{position:fixed;inset:0;z-index:-1;pointer-events:none;overflow:hidden}
+    .bg-waves::before,.bg-waves::after{content:'';position:absolute;left:-20%;right:-20%;height:140%;background-repeat:repeat-x;background-position:center;opacity:.55;animation:waveFloat 22s ease-in-out infinite}
+    .bg-waves::before{top:-30%;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 320'><path fill='%23ffffff' fill-opacity='0.028' d='M0,160L60,170C120,180,240,200,360,192C480,184,600,148,720,149C840,150,960,190,1080,194C1200,198,1320,168,1380,154L1440,140L1440,320L0,320Z'/></svg>")}
+    .bg-waves::after{top:20%;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 320'><path fill='%23ffffff' fill-opacity='0.022' d='M0,224L80,213C160,202,320,180,480,186C640,192,800,224,960,224C1120,224,1280,192,1360,176L1440,160L1440,320L0,320Z'/></svg>");animation-delay:-11s;animation-duration:28s}
+    [data-theme="light"] .bg-waves::before{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 320'><path fill='%23000000' fill-opacity='0.03' d='M0,160L60,170C120,180,240,200,360,192C480,184,600,148,720,149C840,150,960,190,1080,194C1200,198,1320,168,1380,154L1440,140L1440,320L0,320Z'/></svg>")}
+    [data-theme="light"] .bg-waves::after{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 320'><path fill='%23000000' fill-opacity='0.024' d='M0,224L80,213C160,202,320,180,480,186C640,192,800,224,960,224C1120,224,1280,192,1360,176L1440,160L1440,320L0,320Z'/></svg>")}
+    @keyframes waveFloat{0%,100%{transform:translateX(0) translateY(0)}50%{transform:translateX(-30px) translateY(-8px)}}
+
+    /* ── Shadows & hovers em cards existentes ── */
+    .profile-header,.stat-card,.profile-section{
+        box-shadow:0 6px 20px rgba(0,0,0,.18),0 2px 4px rgba(0,0,0,.08),inset 0 1px 0 rgba(255,255,255,.03)!important;
+        transition:all .25s ease;
+        position:relative;overflow:hidden;
     }
-    .form-input-sm:focus { outline: none; border-color: var(--primary); }
-    .btn-action {
-        width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border);
-        background: var(--bg-input); color: var(--text); font-size: .82rem;
-        font-weight: 600; cursor: pointer; text-transform: uppercase; letter-spacing: 1px;
-        transition: all .2s;
+    .profile-header{
+        background:linear-gradient(145deg,var(--bg-card,var(--bg-input)),color-mix(in srgb,var(--bg-card,var(--bg-input)) 92%,var(--bg-input)))!important;
     }
-    .btn-action:hover { background: var(--primary); color: #000; border-color: var(--primary); }
-    .token-display {
-        display: flex; align-items: center; gap: 10px;
-        background: var(--bg-input); border: 1px solid var(--border);
-        border-radius: 10px; padding: 12px 14px; margin: 0 14px 14px;
+    .profile-header::before{content:'';position:absolute;top:-50%;right:-20%;width:60%;height:200%;background:radial-gradient(ellipse,rgba(255,255,255,.025) 0%,transparent 60%);pointer-events:none}
+    [data-theme="light"] .profile-header::before{background:radial-gradient(ellipse,rgba(0,0,0,.015) 0%,transparent 60%)}
+    .profile-header:hover,.stat-card:hover,.profile-section:hover{
+        transform:translateY(-2px);
+        box-shadow:0 12px 32px rgba(0,0,0,.26),0 4px 10px rgba(0,0,0,.12),inset 0 1px 0 rgba(255,255,255,.05)!important;
+        border-color:var(--border-hover,var(--border))!important;
     }
-    .token-code {
-        font-family: 'Courier New', monospace; font-size: 1.2rem;
-        font-weight: 800; letter-spacing: 3px; color: var(--primary);
+    .profile-avatar{
+        box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 4px 14px rgba(0,0,0,.3)!important;
+        transition:transform .25s ease;
     }
-    .token-label { font-size: .72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+    .profile-header:hover .profile-avatar{transform:scale(1.05) rotate(-2deg)}
+
+    .stat-value{text-shadow:0 1px 2px rgba(0,0,0,.2)}
+
+    /* ── Section titles: uppercase profissional sem emojis ── */
+    .profile-section-title{
+        font-size:.64rem!important;letter-spacing:1.4px!important;
+        text-transform:uppercase!important;font-weight:600!important;
+        color:var(--text-muted)!important;
+        padding:11px 16px!important;
+        background:color-mix(in srgb,var(--bg-input) 40%,transparent);
+        border-bottom:1px solid var(--border);
+    }
+
+    /* ── Itens: hover lateral bar ── */
+    .profile-item,.profile-menu-item,.theme-row{
+        position:relative;transition:all .18s ease!important;
+    }
+    .profile-item::after,.profile-menu-item::after{
+        content:'';position:absolute;left:0;top:0;bottom:0;width:2px;
+        background:var(--text-muted);transform:scaleY(0);
+        transition:transform .2s ease;transform-origin:center;
+    }
+    .profile-item:hover,.profile-menu-item:hover,.theme-row:hover{
+        background:color-mix(in srgb,var(--bg-input) 55%,transparent)!important;
+        padding-left:20px!important;
+    }
+    .profile-menu-item:hover::after,.profile-item:hover::after{transform:scaleY(.6)}
+    .profile-menu-item .profile-menu-arrow{transition:transform .2s ease,color .2s ease}
+    .profile-menu-item:hover .profile-menu-arrow{transform:translateX(3px);color:var(--text)}
+    .profile-menu-item.logout::after{background:var(--danger,#f87171)}
+    .profile-menu-item.logout:hover{background:rgba(248,113,113,.06)!important}
+
+    /* ── Icons neutros ── */
+    .profile-item-icon,.profile-menu-icon{
+        color:var(--text-muted)!important;font-weight:400!important;
+        opacity:.75;transition:opacity .2s ease;
+    }
+    .profile-menu-item:hover .profile-menu-icon,.profile-item:hover .profile-item-icon{opacity:1}
+
+    /* ── Token card ── */
+    .token-display{
+        display:flex;align-items:center;gap:10px;
+        background:linear-gradient(135deg,var(--bg-input),color-mix(in srgb,var(--bg-input) 85%,var(--bg-card,var(--bg-input))));
+        border:1px solid var(--border);border-radius:10px;
+        padding:14px 16px;margin:12px 14px;
+        box-shadow:inset 0 1px 2px rgba(0,0,0,.15),0 4px 12px rgba(0,0,0,.1);
+        transition:all .25s ease;
+    }
+    .token-display:hover{
+        transform:translateY(-1px);border-color:var(--border-hover,var(--border));
+        box-shadow:inset 0 1px 2px rgba(0,0,0,.18),0 8px 20px rgba(0,0,0,.18);
+    }
+    .token-code{
+        font-family:'SF Mono','Consolas','Courier New',monospace;font-size:1.25rem;
+        font-weight:700;letter-spacing:4px;color:var(--text);
+        text-shadow:0 1px 2px rgba(0,0,0,.3);
+    }
+    .token-label{font-size:.66rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1.2px;font-weight:600;margin-bottom:4px}
+
+    /* ── Collapsible form ── */
+    .collapsible-section{padding:0 14px 14px}
+    .section-form{display:flex;flex-direction:column;gap:12px}
+    .form-label-sm{font-size:.68rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;font-weight:600;display:block;margin-bottom:5px}
+    .form-input-sm{
+        width:100%;padding:12px 14px;border-radius:8px;
+        border:1px solid var(--border);background:var(--bg-input);
+        color:var(--text);font-size:.9rem;font-family:inherit;
+        transition:all .2s ease;
+        box-shadow:inset 0 1px 2px rgba(0,0,0,.15);
+    }
+    .form-input-sm:hover:not(:focus){border-color:var(--border-hover,var(--border))}
+    .form-input-sm:focus{outline:none;border-color:var(--primary);box-shadow:inset 0 1px 2px rgba(0,0,0,.15),0 0 0 3px color-mix(in srgb,var(--primary) 18%,transparent)}
+    .btn-action{
+        width:100%;padding:13px;border-radius:8px;border:1px solid var(--border);
+        background:var(--bg-input);color:var(--text);font-size:.8rem;
+        font-weight:700;cursor:pointer;text-transform:uppercase;letter-spacing:1px;
+        transition:all .22s ease;font-family:inherit;
+        box-shadow:0 4px 12px rgba(0,0,0,.18),inset 0 1px 0 rgba(255,255,255,.04);
+        position:relative;overflow:hidden;
+    }
+    .btn-action::before{content:'';position:absolute;top:0;left:-100%;width:100%;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.12),transparent);transition:left .5s ease}
+    .btn-action:hover{
+        background:var(--primary);color:#000;border-color:var(--primary);
+        transform:translateY(-2px);
+        box-shadow:0 10px 24px color-mix(in srgb,var(--primary) 30%,transparent),inset 0 1px 0 rgba(255,255,255,.15);
+    }
+    .btn-action:hover::before{left:100%}
+    .btn-action:active{transform:translateY(0) scale(.98)}
+
+    /* ── Theme switcher ── */
+    .theme-opt{
+        transition:all .2s ease!important;
+        box-shadow:inset 0 1px 0 rgba(255,255,255,.04),0 1px 2px rgba(0,0,0,.1);
+    }
+    .theme-opt:hover{transform:translateY(-1px);box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 4px 10px rgba(0,0,0,.2)}
+    .theme-opt.active{box-shadow:inset 0 2px 4px rgba(0,0,0,.2)}
+
+    /* ── Header top ── */
+    .header{
+        backdrop-filter:blur(18px) saturate(160%);-webkit-backdrop-filter:blur(18px) saturate(160%);
+        background:color-mix(in srgb,var(--bg,#0a0a0c) 80%,transparent)!important;
+        box-shadow:0 4px 20px rgba(0,0,0,.2);
+    }
     </style>
 </head>
 <body>
+    <div class="bg-waves"></div>
     <div class="toast" id="toast"></div>
 
     <header class="header">
@@ -44,12 +156,14 @@
     </header>
 
     <div class="page active">
+        <!-- ── 1. Header ── -->
         <div class="profile-header">
             <div class="profile-avatar" id="profileAvatar" onclick="triggerPhotoUpload()">—</div>
             <div class="profile-name" id="profileName">Entregador</div>
             <div class="profile-email" id="profileEmail">-</div>
         </div>
 
+        <!-- ── 2. Stats ── -->
         <div class="profile-stats">
             <div class="stat-card">
                 <div class="stat-value" id="totalDeliveries">0</div>
@@ -61,6 +175,7 @@
             </div>
         </div>
 
+        <!-- ── 3. Informações ── -->
         <div class="profile-section">
             <div class="profile-section-title">Informações</div>
             <div class="profile-item"><span class="profile-item-icon">☎</span><span class="profile-item-label">Telefone</span><span class="profile-item-value" id="profilePhone">-</span></div>
@@ -69,9 +184,9 @@
             <div class="profile-item"><span class="profile-item-icon">≡</span><span class="profile-item-label">Max. simultâneas</span><span class="profile-item-value" id="profileMaxOrders">1</span></div>
         </div>
 
-        <!-- Token -->
+        <!-- ── 4. Token ── -->
         <div class="profile-section">
-            <div class="profile-section-title">🔑 Token de Identificação</div>
+            <div class="profile-section-title">Token de Identificação</div>
             <div class="token-display">
                 <div>
                     <div class="token-label">Seu token</div>
@@ -80,37 +195,61 @@
             </div>
         </div>
 
-        <!-- Idle Driver Section -->
-        <div class="profile-section" id="idleDriverSection" style="display:none;">
-            <div class="profile-section-title">Entregador de Loja</div>
-            <div class="profile-item"><span class="profile-item-icon">◉</span><span class="profile-item-label">Status Ocioso</span><span class="profile-item-value" id="idleStateLabel">-</span></div>
-            <div class="profile-item"><span class="profile-item-icon">⟳</span><span class="profile-item-label">Cooldown</span><span class="profile-item-value" id="idleCooldownLabel">-</span></div>
-            <div class="profile-item"><span class="profile-item-icon">□</span><span class="profile-item-label">Loja vinculada</span><span class="profile-item-value" id="idleStoreName">-</span></div>
-            <div class="profile-menu-item" onclick="toggleIdleAvailability()"><span class="profile-menu-icon">⚡</span><span class="profile-menu-text" id="idleToggleText">Disponível para entregas do app</span><span class="profile-menu-arrow">›</span></div>
+        <!-- ── 5. Loja Vinculada ── -->
+        <div class="profile-section" id="linkedStoreSection" style="display:none;">
+            <div class="profile-section-title">Loja Vinculada</div>
+            <div class="profile-item">
+                <span class="profile-item-icon">□</span>
+                <span class="profile-item-label">Loja</span>
+                <span class="profile-item-value" id="linkedStoreName">Carregando...</span>
+            </div>
+            <div class="profile-menu-item logout" onclick="unlinkFromStore()">
+                <span class="profile-menu-icon">×</span>
+                <span class="profile-menu-text">Desvincular da loja</span>
+                <span class="profile-menu-arrow">›</span>
+            </div>
         </div>
 
-        <!-- Account -->
+        <!-- ── 6. Conta ── -->
         <div class="profile-section">
             <div class="profile-section-title">Conta</div>
             <div class="profile-menu-item" onclick="navigateTo('earnings.html')"><span class="profile-menu-icon">$</span><span class="profile-menu-text">Ganhos e Pagamentos</span><span class="profile-menu-arrow">›</span></div>
-            <div class="profile-menu-item" onclick="requestNotificationPermission()"><span class="profile-menu-icon">🔔</span><span class="profile-menu-text">Ativar Notificações</span><span class="profile-menu-arrow">›</span></div>
-            <div class="profile-menu-item" onclick="requestLocationPermission()"><span class="profile-menu-icon">◉</span><span class="profile-menu-text">Permissão de Localização</span><span class="profile-menu-arrow">›</span></div>
-            <div class="profile-menu-item" onclick="triggerPhotoUpload()"><span class="profile-menu-icon">📷</span><span class="profile-menu-text">Alterar Foto</span><span class="profile-menu-arrow">›</span></div>
-            <div class="profile-menu-item logout" onclick="handleLogout()"><span class="profile-menu-icon">→</span><span class="profile-menu-text">Sair</span><span class="profile-menu-arrow">›</span></div>
+            <div class="profile-menu-item" onclick="requestNotificationPermission()"><span class="profile-menu-icon">◉</span><span class="profile-menu-text">Ativar Notificações</span><span class="profile-menu-arrow">›</span></div>
+            <div class="profile-menu-item" onclick="requestLocationPermission()"><span class="profile-menu-icon">⊙</span><span class="profile-menu-text">Permissão de Localização</span><span class="profile-menu-arrow">›</span></div>
+            <div class="profile-menu-item" onclick="triggerPhotoUpload()"><span class="profile-menu-icon">○</span><span class="profile-menu-text">Alterar Foto</span><span class="profile-menu-arrow">›</span></div>
         </div>
 
-        <!-- Security -->
+        <!-- ── 7. Segurança ── -->
         <div class="profile-section" id="securitySection">
-            <div class="profile-section-title">🔐 Segurança</div>
-            <div class="profile-item" id="emailStatusItem"><span class="profile-item-icon">📧</span><span class="profile-item-label">E-mail</span><span class="profile-item-value" id="emailStatusValue">-</span></div>
-            <div class="profile-menu-item" onclick="toggleSection('changeEmailSection')"><span class="profile-menu-icon">✏️</span><span class="profile-menu-text">Alterar E-mail</span><span class="profile-menu-arrow">›</span></div>
+            <div class="profile-section-title">Segurança</div>
+            <div class="profile-item" id="emailStatusItem"><span class="profile-item-icon">@</span><span class="profile-item-label">E-mail</span><span class="profile-item-value" id="emailStatusValue">-</span></div>
+            <div class="profile-menu-item" onclick="toggleSection('changeEmailSection')"><span class="profile-menu-icon">✎</span><span class="profile-menu-text">Alterar E-mail</span><span class="profile-menu-arrow">›</span></div>
             <div id="changeEmailSection" class="collapsible-section" style="display:none;">
                 <div class="section-form">
-                    <div style="margin-bottom:10px;"><label class="form-label-sm">Novo e-mail</label><input type="email" class="form-input-sm" id="newEmailInput" placeholder="novo@email.com"></div>
-                    <div style="margin-bottom:10px;"><label class="form-label-sm">Senha atual (confirmação)</label><input type="password" class="form-input-sm" id="emailConfirmPassword" placeholder="Sua senha"></div>
+                    <div><label class="form-label-sm">Novo e-mail</label><input type="email" class="form-input-sm" id="newEmailInput" placeholder="novo@email.com"></div>
+                    <div><label class="form-label-sm">Senha atual (confirmação)</label><input type="password" class="form-input-sm" id="emailConfirmPassword" placeholder="Sua senha"></div>
                     <button class="btn-action" onclick="handleChangeEmail()">Alterar E-mail</button>
                 </div>
             </div>
+        </div>
+
+        <!-- ── 8. Aparência ── -->
+        <div class="profile-section">
+            <div class="profile-section-title">Aparência</div>
+            <div class="theme-row">
+                <span class="profile-item-icon">◐</span>
+                <span class="theme-label">Tema</span>
+                <div class="theme-options">
+                    <div class="theme-opt" id="themeDark" onclick="setTheme('dark')" title="Escuro">◐</div>
+                    <div class="theme-opt" id="themeLight" onclick="setTheme('light')" title="Claro">☀</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── 9. Sessão ── -->
+        <div class="profile-section">
+            <div class="profile-section-title">Sessão</div>
+            <div class="profile-menu-item logout" onclick="handleLogout()"><span class="profile-menu-icon">→</span><span class="profile-menu-text">Sair da conta</span><span class="profile-menu-arrow">›</span></div>
         </div>
     </div>
 
@@ -135,9 +274,20 @@
     <script src="modules/cache.js"></script>
     <script src="modules/firebase-init.js"></script>
     <script src="modules/shared.js"></script>
-    <script src="modules/idle.js"></script>
     <script src="modules/fcm.js"></script>
     <script>
+    // ── Theme ──
+    function getTheme(){return localStorage.getItem('pedrad-theme')||'dark'}
+    function applyTheme(t){
+        document.documentElement.setAttribute('data-theme',t);
+        document.getElementById('themeDark').classList.toggle('active',t==='dark');
+        document.getElementById('themeLight').classList.toggle('active',t==='light');
+        const meta=document.querySelector('meta[name="theme-color"]');
+        if(meta)meta.setAttribute('content',t==='light'?'#f5f5f7':'#0a0a0c');
+    }
+    function setTheme(t){localStorage.setItem('pedrad-theme',t);applyTheme(t)}
+    applyTheme(getTheme());
+
     // ==================== INIT ====================
     document.addEventListener('DOMContentLoaded', async () => {
         const ok = await checkAuth();
@@ -145,18 +295,11 @@
         renderBottomNav('profile.html');
         await ensureDriverToken();
         updateProfileUI();
-
-        if (driverData.driverType === 'store' && driverData.storeId) {
-            document.getElementById('idleDriverSection').style.display = 'block';
-            await IdleDriver.init();
-            IdleDriver.onStateChange = updateIdleSection;
-            updateIdleSection();
-            loadStoreName();
-        }
+        await loadLinkedStore();
 
         setupDriverListener((newData) => {
+            Object.assign(driverData, newData);
             updateProfileUI();
-            if (IdleDriver.isStoreDriver()) updateIdleSection();
         });
     });
 
@@ -208,26 +351,56 @@
         }
     }
 
-    async function loadStoreName() {
-        if (!driverData?.storeId) return;
-        const store = await getStoreData(driverData.storeId);
-        if (store) document.getElementById('idleStoreName').textContent = store.name || store.storeName || '-';
+    // ==================== LINKED STORE ====================
+    async function loadLinkedStore() {
+        const storeId = driverData.linkedStoreId || (driverData.linkedStores || [])[0];
+        if (!storeId) return;
+        document.getElementById('linkedStoreSection').style.display = 'block';
+        try {
+            const store = await getStoreData(storeId);
+            document.getElementById('linkedStoreName').textContent =
+                store?.name || store?.storeName || storeId;
+        } catch(e) {
+            document.getElementById('linkedStoreName').textContent = storeId;
+        }
     }
 
-    function updateIdleSection() {
-        document.getElementById('idleStateLabel').textContent = IdleDriver.getStateLabel();
-        const cd = IdleDriver.getCooldownRemaining();
-        document.getElementById('idleCooldownLabel').textContent = cd > 0 ? cd + ' min restantes' : 'Sem cooldown';
-        const t = document.getElementById('idleToggleText');
-        if (IdleDriver.state === 'STORE_IDLE') t.textContent = 'Pausar disponibilidade';
-        else if (IdleDriver.state === 'OFFLINE') t.textContent = 'Ativar disponibilidade p/ app';
-        else t.textContent = 'Disponibilidade: ' + IdleDriver.getStateLabel();
-    }
+    async function unlinkFromStore() {
+        const storeId = driverData.linkedStoreId || (driverData.linkedStores || [])[0];
+        if (!storeId) return;
+        showConfirmModal(
+            'Desvincular da loja?',
+            'Você deixará de receber pedidos desta loja e voltará a receber pedidos do app.',
+            async () => {
+                try {
+                    const current = Array.isArray(driverData.linkedStores) ? driverData.linkedStores : [];
+                    const newStores = current.filter(s => s !== storeId);
+                    const update = {
+                        linkedStores: newStores,
+                        linkedStoreId: newStores[0] || null,
+                        storeId: newStores[0] || null
+                    };
+                    if (newStores.length === 0) {
+                        update.driverType  = 'app';
+                        update.appEligible = true;
+                    }
 
-    function toggleIdleAvailability() {
-        if (IdleDriver.state === 'STORE_IDLE') { IdleDriver.transition('GO_OFFLINE'); showToast('Disponibilidade pausada'); }
-        else if (IdleDriver.state === 'OFFLINE') { IdleDriver.transition('GO_ONLINE'); showToast('Disponível para entregas do app'); }
-        else showToast('Não é possível alterar agora: ' + IdleDriver.getStateLabel());
+                    await db.collection('drivers').doc(driverData.id).update(update);
+                    Object.assign(driverData, update);
+                    Cache.setDriver(driverData);
+
+                    if (newStores.length === 0) {
+                        document.getElementById('linkedStoreSection').style.display = 'none';
+                    } else {
+                        await loadLinkedStore();
+                    }
+                    showToast('Desvinculado da loja');
+                } catch(e) {
+                    console.error(e);
+                    showToast('Erro ao desvincular');
+                }
+            }
+        );
     }
 
     // ==================== SECTIONS ====================
@@ -243,7 +416,10 @@
         if (!password) { showToast('Digite sua senha'); return; }
         if (password !== driverData.password) { showToast('Senha incorreta'); return; }
         try {
-            await db.collection('drivers').doc(driverData.id).update({ email: newEmail, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+            await db.collection('drivers').doc(driverData.id).update({
+                email: newEmail,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
             driverData.email = newEmail;
             Cache.setDriver(driverData);
             updateProfileUI();
@@ -265,8 +441,13 @@
         showToast('Processando...');
         try {
             const c = await compressImage(file, 400, 0.7);
-            await db.collection('drivers').doc(driverData.id).update({ photoUrl: c, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
-            driverData.photoUrl = c; Cache.setDriver(driverData); updateProfileUI();
+            await db.collection('drivers').doc(driverData.id).update({
+                photoUrl: c,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            driverData.photoUrl = c;
+            Cache.setDriver(driverData);
+            updateProfileUI();
             showToast('Foto atualizada');
         } catch (e) { showToast('Erro ao enviar foto'); }
         event.target.value = '';
@@ -313,7 +494,12 @@
 
     function handleLogout() {
         showConfirmModal('Deseja sair?', 'Você será desconectado.', async () => {
-            try { if (driverData) await db.collection('drivers').doc(driverData.id).update({ online: false, lastOnlineAt: firebase.firestore.FieldValue.serverTimestamp() }); } catch (e) {}
+            try {
+                if (driverData) await db.collection('drivers').doc(driverData.id).update({
+                    online: false,
+                    lastOnlineAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+            } catch (e) {}
             Cache.clearAll();
             window.location.href = 'index.html';
         });
