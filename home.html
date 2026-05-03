@@ -20,7 +20,10 @@
         <div class="header-title">PEDRA DELIVERY</div>
         <div class="header-status">
             <span class="status-text" id="statusText">Offline</span>
-            <div class="toggle" id="onlineToggle" onclick="toggleOnline()"></div>
+            <label class="driver-switch" aria-label="Alternar disponibilidade">
+                <input type="checkbox" id="onlineToggle" onchange="toggleOnline()">
+                <span class="slider"></span>
+            </label>
         </div>
     </header>
 
@@ -156,7 +159,7 @@
 
         isOnline = Cache.getOnline();
         if (isOnline) {
-            document.getElementById('onlineToggle').classList.add('active');
+            document.getElementById('onlineToggle').checked = true;
             document.getElementById('statusText').textContent = 'Online';
         }
 

@@ -206,8 +206,9 @@ async function toggleOnline() {
         }
     } catch(e) {}
 
-    isOnline = !isOnline;
-    document.getElementById('onlineToggle').classList.toggle('active', isOnline);
+    const onlineToggle = document.getElementById('onlineToggle');
+    isOnline = onlineToggle ? !!onlineToggle.checked : !isOnline;
+    if (onlineToggle) onlineToggle.checked = isOnline;
     document.getElementById('statusText').textContent = isOnline ? 'Online' : 'Offline';
     Cache.setOnline(isOnline);
     updateDriverOnlineStatus(isOnline);
