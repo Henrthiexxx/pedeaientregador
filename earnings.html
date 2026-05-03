@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Pedrad - Ganhos</title>
+    <title>Pedra Delivery - Ganhos</title>
     <meta name="theme-color" content="#000000">
+    <script>(function(){var t=localStorage.getItem("pedrad-theme")||"dark";document.documentElement.setAttribute("data-theme",t)})();</script>
     <link rel="stylesheet" href="index.css">
     
 </head>
@@ -17,7 +18,7 @@
     <div class="toast" id="toast"></div>
 
     <header class="header">
-        <div class="header-title">PEDRAD</div>
+        <div class="header-title">PEDRA DELIVERY</div>
         <span class="status-text">Ganhos</span>
     </header>
 
@@ -115,6 +116,7 @@
             try {
                 const snapshot = await db.collection('orders')
                     .where('driverId', '==', driverData.id)
+                    .where('createdAt', '>=', new Date(Date.now() - 30 * 86400000))
                     .where('status', '==', 'delivered')
                     .get();
                 allHistory = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));

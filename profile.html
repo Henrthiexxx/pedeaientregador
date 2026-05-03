@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Pedrad - Perfil</title>
+    <title>Pedra Delivery - Perfil</title>
     <meta name="theme-color" content="#000000">
     <script>(function(){var t=localStorage.getItem("pedrad-theme")||"dark";document.documentElement.setAttribute("data-theme",t)})();</script>
     <link rel="stylesheet" href="index.css">
@@ -173,7 +173,7 @@
     <div class="toast" id="toast"></div>
 
     <header class="header">
-        <div class="header-title">PEDRAD</div>
+        <div class="header-title">PEDRA DELIVERY</div>
         <span class="status-text">Perfil</span>
     </header>
 
@@ -260,10 +260,10 @@
             <div class="profile-section-title">Aparência</div>
 <div class="theme-segmented" data-active="dark">
     <div class="theme-seg-indicator"></div>
-    <button class="theme-seg-btn" id="themeDark" onclick="setTheme('dark')">
+    <button class="theme-seg-btn" id="themeDark" type="button" onclick="setTheme('dark', event)">
         <span class="theme-seg-ico">◐</span><span>Escuro</span>
     </button>
-    <button class="theme-seg-btn" id="themeLight" onclick="setTheme('light')">
+    <button class="theme-seg-btn" id="themeLight" type="button" onclick="setTheme('light', event)">
         <span class="theme-seg-ico">☀</span><span>Claro</span>
     </button>
 </div>
@@ -303,11 +303,6 @@
 function applyTheme(t){
     const html=document.documentElement;
     html.setAttribute('data-theme',t);
-    // força repaint (WebView Android)
-    html.style.display='none';
-    void html.offsetHeight;
-    html.style.display='';
-
     const seg=document.querySelector('.theme-segmented');
     if(seg)seg.dataset.active=t;
     document.getElementById('themeDark').classList.toggle('active',t==='dark');
@@ -315,7 +310,7 @@ function applyTheme(t){
     const meta=document.querySelector('meta[name="theme-color"]');
     if(meta)meta.setAttribute('content',t==='light'?'#f5f5f7':'#0a0a0c');
 }
-    function setTheme(t){localStorage.setItem('pedrad-theme',t);applyTheme(t)}
+    function setTheme(t,event){if(event)event.preventDefault();localStorage.setItem('pedrad-theme',t);applyTheme(t)}
     applyTheme(getTheme());
 
     // ==================== INIT ====================

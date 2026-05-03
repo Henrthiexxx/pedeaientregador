@@ -31,7 +31,7 @@ function getLinkedStoreIds(driver) {
 }
 
 function isStoreBoundDriver(driver) {
-    return (driver?.driverType === 'store') || getLinkedStoreIds(driver).length > 0;
+    return getLinkedStoreIds(driver).length > 0;
 }
 
 function getAvailableListenerKey() {
@@ -161,8 +161,9 @@ function setupAvailableOrdersListener() {
     availableListenerKey = getAvailableListenerKey();
 
     availableOrdersUnsub = availableQuery.onSnapshot(snapshot => {
-        const prevCount = availableOrders.length;
+        const prevFilteredCount = getFilteredOrders().length;
         availableOrders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const nextFilteredCount = getFilteredOrders().length;
 
         if (IdleDriver.isStoreDriver() && IdleDriver.state === 'STORE_IDLE') {
             if (availableOrders.some(o => linkedStoreIds.includes(String(o.storeId || '')))) {
@@ -173,10 +174,10 @@ function setupAvailableOrdersListener() {
 
         renderAvailableOrders();
 
-        if (availableOrders.length > prevCount && isOnline && !currentDelivery) {
+        if (nextFilteredCount > prevFilteredCount && isOnline && !currentDelivery) {
             startAlertLoop();
             showToast('Nova entrega disponível');
-        } else if (availableOrders.length === 0) {
+        } else if (nextFilteredCount === 0 || currentDelivery) {
             stopAlertLoop();
         }
     }, (error) => {
@@ -193,7 +194,7 @@ function getFilteredOrders() {
         if (order.driverId) return false;
         if (order.orderType !== 'delivery') return false;
         if (storeBound) return linkedStoreIds.includes(String(order.storeId || ''));
-        return order.salesChannel === 'app';
+        return order.deliveryPool === 'app';
     });
 }
 
@@ -322,8 +323,20 @@ if (storeBound) {
 
     } catch (e) {
         if (e.message === 'ALREADY_ACCEPTED') {
+            const takenId = pendingAcceptOrder?.id;
+            if (takenId) availableOrders = availableOrders.filter(order => order.id !== takenId);
+            pendingAcceptOrder = null;
+            closeModal('acceptModal');
+            renderAvailableOrders();
+            if (getFilteredOrders().length === 0) stopAlertLoop();
             showToast('Outro entregador pegou essa entrega');
         } else if (e.message === 'ORDER_NOT_FOUND') {
+            const missingId = pendingAcceptOrder?.id;
+            if (missingId) availableOrders = availableOrders.filter(order => order.id !== missingId);
+            pendingAcceptOrder = null;
+            closeModal('acceptModal');
+            renderAvailableOrders();
+            if (getFilteredOrders().length === 0) stopAlertLoop();
             showToast('Pedido não encontrado');
         } else {
             console.error('Error accepting:', e);

@@ -12,7 +12,7 @@
 
     <div class="auth-container">
         <div class="auth-logo">
-            <h1>PEDRA Delivery</h1>
+            <h1>PEDRA DELIVERY</h1>
             <p>Entregador</p>
         </div>
         <div class="auth-box">
@@ -38,6 +38,14 @@
     <script src="modules/cache.js"></script>
     <script src="modules/firebase-init.js"></script>
     <script>
+        // Theme
+        (function(){
+            var t=localStorage.getItem('pedrad-theme')||'dark';
+            document.documentElement.setAttribute('data-theme',t);
+            var m=document.querySelector('meta[name="theme-color"]');
+            if(m)m.setAttribute('content',t==='light'?'#f5f5f7':'#0a0a0c');
+        })();
+
         // If already logged in, go to home
         const savedId = localStorage.getItem('pedrad_driver_id');
         if (savedId) {

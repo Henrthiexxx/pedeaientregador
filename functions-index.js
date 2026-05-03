@@ -86,6 +86,7 @@ exports.onNewOrder = functions.firestore
         const orderId = context.params.orderId;
         if (!order.storeId) return;
 
+        // Pedido local/PDV: notifica loja mas NÃO entregadores
         try {
             const storeDoc = await db.collection("stores").doc(order.storeId).get();
             if (!storeDoc.exists) return;
@@ -131,6 +132,7 @@ exports.onOrderUpdate = functions.firestore
 
         // ★ Pedido local/PDV: NUNCA notifica entregadores
         if (isLocalOrder(after)) {
+            // Apenas notifica cliente se necessário
             if (after.status === "delivering" && before.status !== "delivering") {
                 await notifyCustomer(after, orderId, "🛵 Saiu para entrega!", "Seu pedido está a caminho");
             }
@@ -169,17 +171,17 @@ exports.onOrderUpdate = functions.firestore
     });
 
 // ══════════════════════════════════════════════
-//  DISPATCH INTELIGENTE
+//  DISPATCH INTELIGENTE (substituiu notifyAvailableDrivers)
 // ══════════════════════════════════════════════
 //
 //  Fluxo:
 //  1. Busca drivers online + ativos
-//  2. Filtra por elegibilidade (linkedStores é a fonte de verdade)
+//  2. Filtra por elegibilidade (store drivers da loja > app eligible > app drivers)
 //  3. Ordena por score (menos entregas recentes = mais prioridade)
-//  4. Tier 1: vinculados à loja do pedido
-//  5. Tier 2: vinculados a outra loja mas com appEligible
-//  6. Tier 3: drivers livres (sem vínculo)
-//  7. Rate limit: max 3 ofertas por pedido, max 5 ofertas/min por driver
+//  4. Tier 1: notifica pool menor (vinculados à loja)
+//  5. Tier 2: se ninguém vinculado, abre para pool geral
+//  6. Rate limit: max 3 ofertas por pedido, max 5 ofertas/min por driver
+//  7. Cria dispatch offer no Firestore com TTL
 
 async function dispatchOrder(order, orderId) {
     try {
@@ -219,7 +221,10 @@ async function dispatchOrder(order, orderId) {
             const lastDelivery = d.lastDeliveryAt?.toDate?.()?.getTime() || 0;
             const score = ((now - lastDelivery) / 60000) - (totalDeliveries * 0.1);
 
-            allDrivers.push({ id: doc.id, tokens, isLinked, score, tier: isLinked ? 1 : 3 });
+            allDrivers.push({
+                id: doc.id, tokens, isLinked, score,
+                tier: isLinked ? 1 : 3
+            });
         }
 
         if (allDrivers.length === 0) return;
@@ -381,6 +386,8 @@ async function notifyCustomer(order, orderId, title, body) {
 // ══════════════════════════════════════════════
 //  SYNC: COVERED STORES (mantém config doc)
 // ══════════════════════════════════════════════
+//  Quando linkedStores de um driver muda, atualiza config/coveredStores
+//  Isso evita que o client leia TODOS os drivers para saber quais lojas tem entregador
 
 exports.onDriverUpdate = functions.firestore
     .document("drivers/{driverId}")
