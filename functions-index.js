@@ -268,7 +268,8 @@ async function dispatchOrder(order, orderId) {
             for (const [did, tks] of Object.entries(byDriver)) await cleanInvalidTokens("drivers", did, tks);
         }
 
-        console.log(`Dispatch ${orderId}: ${pool.length} drivers (tier1: ${tier1.length})`);
+        const tier1Count = pool.filter(d => d.tier === 1).length;
+        console.log(`Dispatch ${orderId}: ${pool.length} drivers (tier1: ${tier1Count})`);
     } catch (err) {
         console.error("dispatchOrder erro:", err);
     }
