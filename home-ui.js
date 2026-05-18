@@ -27,6 +27,57 @@ function playNotificationSound() {
     } catch(e) {}
 }
 
+function normalizeCopyText(value) {
+    return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+function buildClientAddressText(order) {
+    if (!order?.address) return '';
+    const a = order.address;
+    const line1 = [a.street, a.number].filter(Boolean).join(', ');
+    const line2 = [a.neighborhood, a.complement ? `Compl: ${a.complement}` : '', a.reference ? `Ref: ${a.reference}` : '']
+        .filter(Boolean)
+        .join(' | ');
+    return [line1, line2].filter(Boolean).join(' - ');
+}
+
+async function copyClientField(type) {
+    const order = currentDelivery;
+    if (!order) return;
+
+    const clientName = normalizeCopyText(order.userName || 'Cliente');
+    const clientPhone = normalizeCopyText(order.userPhone || '');
+    const address = normalizeCopyText(buildClientAddressText(order));
+    const storeName = normalizeCopyText(order.storeName || '');
+
+    let text = '';
+    if (type === 'name') text = clientName;
+    if (type === 'phone') text = clientPhone;
+    if (type === 'address') text = address;
+    if (type === 'all') {
+        text = [
+            `Cliente: ${clientName}`,
+            clientPhone ? `Telefone: ${clientPhone}` : '',
+            address ? `Endereço: ${address}` : '',
+            storeName ? `Loja: ${storeName}` : '',
+            order.id ? `Pedido: #${String(order.id).slice(-6).toUpperCase()}` : ''
+        ].filter(Boolean).join('\n');
+    }
+
+    if (!text) {
+        showToast('Sem informação para copiar');
+        return;
+    }
+
+    try {
+        await navigator.clipboard.writeText(text);
+        showToast('Copiado');
+    } catch (e) {
+        console.error('clipboard error:', e);
+        showToast('Não foi possível copiar');
+    }
+}
+
 // ==================== DRIVER CARD ====================
 function updateDriverCard() {
     if (!driverData) return;
@@ -233,6 +284,7 @@ function renderCurrentDelivery() {
     const earning    = calculateDriverEarning(currentDelivery.driverEarning || fee, currentDelivery.distance);
     const clientName = currentDelivery.userName || 'Cliente';
     const clientPhone= currentDelivery.userPhone || '';
+    const clientAddressText = buildClientAddressText(currentDelivery);
     document.getElementById('currentDelivery').innerHTML = `
         <div class="current-delivery-header">
             <div class="current-delivery-title">Pedido #${currentDelivery.id.slice(-6).toUpperCase()}</div>
@@ -265,6 +317,12 @@ function renderCurrentDelivery() {
             ${clientPhone ? `<div class="client-phone"><a href="tel:${clientPhone}" style="color:var(--primary);text-decoration:none;">${clientPhone}</a></div>` : ''}
             ${currentDelivery.address?.complement ? `<div style="font-size:0.8rem;color:var(--text-muted);margin-top:8px;">${currentDelivery.address.complement}</div>` : ''}
             ${currentDelivery.address?.reference  ? `<div style="font-size:0.8rem;color:var(--text-muted);">Ref: ${currentDelivery.address.reference}</div>` : ''}
+            <div class="client-copy-actions">
+                <button class="btn btn-secondary btn-sm" onclick="copyClientField('phone')">Copiar telefone</button>
+                <button class="btn btn-secondary btn-sm" onclick="copyClientField('name')">Copiar nome</button>
+                <button class="btn btn-secondary btn-sm" onclick="copyClientField('address')" ${clientAddressText ? '' : 'disabled'}>Copiar endereço</button>
+                <button class="btn btn-primary btn-sm" onclick="copyClientField('all')">Copiar tudo</button>
+            </div>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding:12px;background:var(--bg-input);border-radius:8px;border:1px solid var(--border);">
             <span style="color:var(--text-muted);font-size:0.85rem;">Seu ganho</span>

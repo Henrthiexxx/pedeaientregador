@@ -52,12 +52,6 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .status-text{font-size:.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;font-weight:500}
 
 /* Toggle */
-.driver-switch{position:relative;width:44px;height:24px;display:inline-block;flex-shrink:0}
-.driver-switch input{opacity:0;width:0;height:0;position:absolute}
-.driver-switch .slider{position:absolute;inset:0;background:var(--bg-input);border:1px solid var(--border);border-radius:12px;cursor:pointer;transition:all .2s;touch-action:manipulation}
-.driver-switch .slider::before{content:'';position:absolute;width:18px;height:18px;left:2px;bottom:2px;background:var(--text-muted);border-radius:50%;transition:all .2s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
-.driver-switch input:checked+.slider{background:var(--success);border-color:var(--success)}
-.driver-switch input:checked+.slider::before{transform:translateX(20px);background:#fff}
 .toggle{width:44px;height:24px;background:var(--border);border-radius:12px;position:relative;cursor:pointer;transition:background .25s;border:1px solid var(--border)}
 .toggle.active{background:var(--success);border-color:var(--success)}
 .toggle::after{content:'';position:absolute;width:18px;height:18px;background:var(--text-muted);border-radius:50%;top:2px;left:2px;transition:all .25s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
