@@ -41,6 +41,14 @@ function buildClientAddressText(order) {
     return [line1, line2].filter(Boolean).join(' - ');
 }
 
+function buildStoreAddressText(storeLike) {
+    if (!storeLike) return '';
+    const address = normalizeCopyText(storeLike.address || '');
+    if (address) return address;
+    const neighborhood = normalizeCopyText(storeLike.neighborhood || '');
+    return neighborhood;
+}
+
 async function copyClientField(type) {
     const order = currentDelivery;
     if (!order) return;
@@ -48,7 +56,6 @@ async function copyClientField(type) {
     const clientName = normalizeCopyText(order.userName || 'Cliente');
     const clientPhone = normalizeCopyText(order.userPhone || '');
     const address = normalizeCopyText(buildClientAddressText(order));
-    const storeName = normalizeCopyText(order.storeName || '');
 
     let text = '';
     if (type === 'name') text = clientName;
@@ -58,9 +65,7 @@ async function copyClientField(type) {
         text = [
             `Cliente: ${clientName}`,
             clientPhone ? `Telefone: ${clientPhone}` : '',
-            address ? `Endereço: ${address}` : '',
-            storeName ? `Loja: ${storeName}` : '',
-            order.id ? `Pedido: #${String(order.id).slice(-6).toUpperCase()}` : ''
+            address ? `Endereço: ${address}` : ''
         ].filter(Boolean).join('\n');
     }
 
@@ -154,6 +159,11 @@ function renderAvailableOrders() {
         const fee      = getDeliveryFee(order.address?.neighborhood);
         const earning  = calculateDriverEarning(fee, order.distance);
         const isOwn    = linkedStoreIds.includes(String(order.storeId || ''));
+        const storeAddressText = buildStoreAddressText(order);
+        const storeAddressHtml = `
+            <div class="address-text" id="store-address-${order.id}" style="font-size:.8rem;color:var(--text-muted);margin-top:3px;${storeAddressText ? '' : 'display:none;'}">
+                ${storeAddressText || ''}
+            </div>`;
 
         return `
         <div class="delivery-card ${waitTime > 15 ? 'urgent' : ''}" id="order-${order.id}"
@@ -177,6 +187,7 @@ function renderAvailableOrders() {
                     <div class="address-info">
                         <div class="address-label">Retirar em</div>
                         <div class="address-text">${order.storeName || 'Loja'}</div>
+                        ${storeAddressHtml}
                     </div>
                 </div>
                 <div class="delivery-address">
@@ -205,6 +216,14 @@ function renderAvailableOrders() {
                     el.textContent = '';
                 }
             }
+            const storeAddressEl = document.getElementById('store-address-' + order.id);
+            if (storeAddressEl) {
+                const addr = buildStoreAddressText(store);
+                if (addr) {
+                    storeAddressEl.textContent = addr;
+                    storeAddressEl.style.display = 'block';
+                }
+            }
         }
     });
 }
@@ -221,6 +240,11 @@ function renderAcceptedOrders() {
         const earning     = calculateDriverEarning(order.driverEarning || fee, order.distance);
         const statusLabel = order.status === 'preparing' ? 'Preparando' : 'Pronto p/ retirada';
         const canPickup   = order.status === 'ready';
+        const storeAddressText = buildStoreAddressText(order);
+        const storeAddressHtml = `
+            <div class="address-text" id="accepted-store-address-${order.id}" style="font-size:.8rem;color:var(--text-muted);margin-top:3px;${storeAddressText ? '' : 'display:none;'}">
+                ${storeAddressText || ''}
+            </div>`;
         return `
         <div class="delivery-card" id="accepted-${order.id}" style="border-color: var(--text-muted);">
             <div class="delivery-header">
@@ -242,6 +266,7 @@ function renderAcceptedOrders() {
                     <div class="address-info">
                         <div class="address-label">Retirar em</div>
                         <div class="address-text">${order.storeName || 'Loja'}</div>
+                        ${storeAddressHtml}
                     </div>
                 </div>
                 <div class="delivery-address">
@@ -273,6 +298,14 @@ function renderAcceptedOrders() {
                     el.textContent = '';
                 }
             }
+            const storeAddressEl = document.getElementById('accepted-store-address-' + order.id);
+            if (storeAddressEl) {
+                const addr = buildStoreAddressText(store);
+                if (addr) {
+                    storeAddressEl.textContent = addr;
+                    storeAddressEl.style.display = 'block';
+                }
+            }
         }
     });
 }
@@ -285,6 +318,7 @@ function renderCurrentDelivery() {
     const clientName = currentDelivery.userName || 'Cliente';
     const clientPhone= currentDelivery.userPhone || '';
     const clientAddressText = buildClientAddressText(currentDelivery);
+    const storeAddressFallback = buildStoreAddressText(currentDelivery);
     document.getElementById('currentDelivery').innerHTML = `
         <div class="current-delivery-header">
             <div class="current-delivery-title">Pedido #${currentDelivery.id.slice(-6).toUpperCase()}</div>
@@ -304,6 +338,9 @@ function renderCurrentDelivery() {
                 <div class="route-address">
                     <div class="route-address-label">Retirar</div>
                     <div class="route-address-text">${currentDelivery.storeName || 'Loja'}</div>
+                    <div class="route-address-text" id="pickupStoreAddress" style="font-size:.8rem;color:var(--text-muted);margin-top:3px;">
+                        ${storeAddressFallback || 'Endereço da loja não informado'}
+                    </div>
                 </div>
                 <div class="route-address">
                     <div class="route-address-label">Entregar</div>
@@ -331,6 +368,17 @@ function renderCurrentDelivery() {
         <div class="delivery-actions">
             <button class="btn btn-success btn-block" onclick="openDeliverModal()">Finalizar Entrega</button>
         </div>`;
+
+    if (currentDelivery.storeId) {
+        getStoreData(currentDelivery.storeId).then((store) => {
+            const el = document.getElementById('pickupStoreAddress');
+            if (!el) return;
+            const addr = buildStoreAddressText(store);
+            if (addr) el.textContent = addr;
+        }).catch((err) => {
+            console.error('Erro ao carregar endereço da loja:', err);
+        });
+    }
 }
 
 function updateStats() {
