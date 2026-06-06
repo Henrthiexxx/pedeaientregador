@@ -513,6 +513,7 @@
         const ok = await checkAuth();
         if (!ok) return;
         renderBottomNav('profile.html');
+        setupDriverPushNotifications({ requestPermission: false });
         await ensureDriverToken();
         updateProfileUI();
         await loadLinkedStore();

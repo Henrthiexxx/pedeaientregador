@@ -1,9 +1,11 @@
-const CACHE_VERSION = 2;
+const CACHE_VERSION = 4;
 const CACHE_NAME = 'pedrad-v' + CACHE_VERSION;
 const urlsToCache = [
-    '/',
-    '/index.html',
-    '/manifest.json'
+    './',
+    'index.html',
+    'manifest.json',
+    'icon-192.png',
+    'icon-512.png'
 ];
 
 self.addEventListener('install', event => {
@@ -26,21 +28,42 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
+    const request = event.request;
+    if (request.method !== 'GET') return;
+
+    const requestUrl = new URL(request.url);
+    if (requestUrl.origin !== self.location.origin) return;
+
     // HTML: sempre network first
-    if (event.request.mode === 'navigate') {
+    if (request.mode === 'navigate') {
         event.respondWith(
-            fetch(event.request).catch(() => caches.match(event.request))
+            fetch(request).catch(async () => {
+                return (await caches.match(request))
+                    || (await caches.match('./index.html'))
+                    || new Response('Offline', {
+                        status: 503,
+                        statusText: 'Service Unavailable'
+                    });
+            })
         );
         return;
     }
+
     // Resto: network first, cache fallback
     event.respondWith(
-        fetch(event.request).then(response => {
+        fetch(request).then(response => {
             if (response.ok) {
                 const clone = response.clone();
-                caches.open(CACHE_NAME).then(c => c.put(event.request, clone));
+                caches.open(CACHE_NAME)
+                    .then(c => c.put(request, clone))
+                    .catch(() => {});
             }
             return response;
-        }).catch(() => caches.match(event.request))
+        }).catch(async () => {
+            return (await caches.match(request)) || new Response('Offline', {
+                status: 503,
+                statusText: 'Service Unavailable'
+            });
+        })
     );
 });

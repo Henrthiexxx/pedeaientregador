@@ -1,7 +1,7 @@
-/* ==================== PEDRAD SERVICE WORKER (CACHE + FCM) ==================== */
+/* ==================== PEDRA DELIVERY SERVICE WORKER (CACHE + FCM) ==================== */
 /* ÚNICO SW por scope: PWA cache + Firebase Messaging */
 
-const CACHE_VERSION = 4;
+const CACHE_VERSION = 6;
 const CACHE_NAME = 'pedrad-v' + CACHE_VERSION;
 
 // Path dinâmico — funciona em qualquer subdiretório
@@ -10,7 +10,9 @@ const APP_BASE = new URL(self.registration.scope).pathname;
 const urlsToCache = [
     APP_BASE,
     APP_BASE + 'index.html',
-    APP_BASE + 'manifest.json'
+    APP_BASE + 'manifest.json',
+    APP_BASE + 'icon-192.png',
+    APP_BASE + 'icon-512.png'
 ];
 
 // ---------- CACHE / PWA ----------
@@ -50,14 +52,18 @@ self.addEventListener('fetch', (event) => {
     if (req.mode === 'navigate') {
         event.respondWith(
             fetch(req).catch(async () => {
-                return (await caches.match(req)) || (await caches.match(APP_BASE + 'index.html'));
+                return (await caches.match(req))
+                    || (await caches.match(APP_BASE + 'index.html'))
+                    || new Response('Offline', {
+                        status: 503,
+                        statusText: 'Service Unavailable'
+                    });
             })
         );
         return;
     }
 
     if (url.origin !== self.location.origin) {
-        event.respondWith(fetch(req).catch(() => caches.match(req)));
         return;
     }
 
@@ -71,7 +77,10 @@ self.addEventListener('fetch', (event) => {
             }
             return response;
         } catch (err) {
-            return (await caches.match(req)) || Response.error();
+            return (await caches.match(req)) || new Response('Offline', {
+                status: 503,
+                statusText: 'Service Unavailable'
+            });
         }
     })());
 });
@@ -109,7 +118,7 @@ try {
             order_status:   '🔔 Atualização',
             transfer_offer: '🔄 Oferta de Troca',
             rating:         '⭐ Nova Avaliação',
-            marketing:      '🎉 Pedrad'
+            marketing:      '🎉 Pedra Delivery'
         };
 
         const defaultBody = {
@@ -121,7 +130,7 @@ try {
             marketing:      data.body || 'Confira!'
         };
 
-        const title = notif.title || data.title || defaultTitle[type] || '🔔 Pedrad';
+        const title = notif.title || data.title || defaultTitle[type] || '🔔 Pedra Delivery';
         const body  = notif.body  || data.body  || defaultBody[type]  || 'Nova notificação';
 
         const isUrgent = (type === 'new_order' || type === 'order_ready');
