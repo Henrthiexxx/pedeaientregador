@@ -178,7 +178,7 @@
         if (window.Android) Android.setDriverId(driverData.id);
 
         setupListeners();
-        setupDriverPushNotifications();
+        setupDriverPushNotifications({ requestPermission: false });
 
         if (IdleDriver.isStoreDriver()) {
             await IdleDriver.init();
