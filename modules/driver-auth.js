@@ -11,6 +11,69 @@
 const DriverAuth = (() => {
     'use strict';
 
+    function getAuth() {
+        if (typeof firebase === 'undefined' || !firebase.auth) {
+            throw new Error('Firebase Auth não carregado');
+        }
+        return firebase.auth();
+    }
+
+    function buildDriverPayload(input) {
+        const name = (input.name || '').trim();
+        const email = (input.email || '').trim().toLowerCase();
+        const phoneRaw = String(input.phone || '');
+        const cpfRaw = String(input.cpf || '');
+        const plateRaw = String(input.plate || '');
+        const instagramHandle = String(input.instagramHandle || '').trim().replace(/^@+/, '');
+        const availableDays = Array.isArray(input.availableDays) ? input.availableDays.filter(Boolean) : [];
+        const availableHours = Array.isArray(input.availableHours) ? input.availableHours.filter(Boolean) : [];
+        const phone = phoneRaw.replace(/\D/g, '');
+        const cpf = cpfRaw.replace(/\D/g, '');
+        const plate = plateRaw.trim().toUpperCase();
+
+        return {
+            name,
+            email,
+            phone,
+            cpf,
+            vehicle: input.vehicle || 'moto',
+            plate,
+            pix: (input.pix || '').trim(),
+            instagramHandle,
+            availableDays,
+            availableHours,
+        };
+    }
+
+    function validateDriverInput(input) {
+        const errors = [];
+        if (!/^[A-Za-zÀ-ÿ' -]{3,}$/.test((input.name || '').trim())) errors.push('Nome inválido');
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((input.email || '').trim().toLowerCase())) errors.push('E-mail inválido');
+        if (!/^\d{11}$/.test(String(input.phone || '').replace(/\D/g, ''))) errors.push('Telefone inválido');
+        if (!/^\d{11}$/.test(String(input.cpf || '').replace(/\D/g, ''))) errors.push('CPF inválido');
+        const plate = String(input.plate || '').trim().toUpperCase();
+        if (plate && !/^([A-Z]{3}-\d[A-Z0-9]\d{2}|[A-Z]{3}\d{4})$/.test(plate)) errors.push('Placa inválida');
+        const instagram = String(input.instagramHandle || '').trim().replace(/^@+/, '');
+        if (instagram && !/^[A-Za-z0-9._]{1,30}$/.test(instagram)) errors.push('Instagram inválido');
+        if (Array.isArray(input.availableHours)) {
+            for (const range of input.availableHours) {
+                if (!/^\d{2}:\d{2}\s*-\s*\d{2}:\d{2}$/.test(String(range).trim())) errors.push('Horário inválido');
+            }
+        }
+        if (Array.isArray(input.availableDays) && input.availableDays.some(d => !['seg','ter','qua','qui','sex','sab','dom'].includes(d))) {
+            errors.push('Dia inválido');
+        }
+        const password = String(input.password || '');
+        const confirmPassword = String(input.confirmPassword || '');
+        if (password && confirmPassword && password !== confirmPassword) errors.push('As senhas não conferem');
+        if (password && !isStrongPassword(password)) errors.push('Senha fraca');
+        return errors;
+    }
+
+    function isStrongPassword(password) {
+        return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/.test(String(password || ''));
+    }
+
     // ==================== LOGIN ====================
     async function login(email, password) {
         email = email.trim().toLowerCase();
@@ -50,7 +113,7 @@ const DriverAuth = (() => {
 
         // Step 4: Try Firebase Auth login
         try {
-            await auth.signInWithEmailAndPassword(email, password);
+            await getAuth().signInWithEmailAndPassword(email, password);
             // Success! Clear any temp password flags
             if (driverData.passwordOverride) {
                 await db.collection('drivers').doc(driverData.id).update({
@@ -82,6 +145,63 @@ const DriverAuth = (() => {
         }
     }
 
+    // ==================== SELF REGISTRATION ====================
+    async function register(input) {
+        const validationErrors = validateDriverInput(input);
+        if (validationErrors.length) {
+            showToast(validationErrors[0]);
+            return false;
+        }
+        const data = buildDriverPayload(input);
+        const password = String(input.password || '');
+
+        if (!data.name || !data.email || !data.phone || !data.cpf || !password) {
+            showToast('Preencha todos os campos obrigatórios');
+            return false;
+        }
+        if (!isStrongPassword(password)) {
+            showToast('A senha deve ter 8+ caracteres, com maiúscula, minúscula e número');
+            return false;
+        }
+
+        try {
+            const existing = await db.collection('drivers').where('email', '==', data.email).limit(1).get();
+            if (!existing.empty) {
+                showToast('Este e-mail já está cadastrado');
+                return false;
+            }
+
+            const auth = getAuth();
+            const cred = await auth.createUserWithEmailAndPassword(data.email, password);
+            await cred.user.sendEmailVerification();
+
+            await db.collection('drivers').doc(cred.user.uid).set({
+                ...data,
+                authUid: cred.user.uid,
+                status: 'pending',
+                online: false,
+                selfRegistered: true,
+                emailVerified: false,
+                registeredAt: firebase.firestore.FieldValue.serverTimestamp(),
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+            await auth.signOut();
+            clearSession();
+            showToast('Cadastro enviado. Aguarde aprovação do administrador.');
+            return true;
+        } catch (err) {
+            const msgs = {
+                'auth/email-already-in-use': 'Este e-mail já está em uso',
+                'auth/invalid-email': 'E-mail inválido',
+                'auth/weak-password': 'Senha muito fraca'
+            };
+            showToast(msgs[err.code] || ('Erro ao cadastrar: ' + err.message));
+            return false;
+        }
+    }
+
     // ==================== TEMP PASSWORD LOGIN ====================
     async function handleTempPasswordLogin(driverData, tempPassword) {
         try {
@@ -92,6 +212,7 @@ const DriverAuth = (() => {
                 // Or: if the auth account was recreated, sign in directly
 
                 // Try creating a secondary app to update password
+                const auth = getAuth();
                 const tempApp = firebase.initializeApp(
                     auth.app.options,
                     'tempLogin_' + Date.now()
@@ -105,7 +226,7 @@ const DriverAuth = (() => {
                     await tempApp.delete();
 
                     // Now sign in on main auth
-                    await auth.signInWithEmailAndPassword(driverData.email, tempPassword);
+                    await getAuth().signInWithEmailAndPassword(driverData.email, tempPassword);
 
                     // Clear temp password
                     await db.collection('drivers').doc(driverData.id).update({
@@ -157,6 +278,7 @@ const DriverAuth = (() => {
     // ==================== CREATE AUTH ACCOUNT ====================
     async function createAuthAndLogin(driverData, password) {
         try {
+            const auth = getAuth();
             const cred = await auth.createUserWithEmailAndPassword(driverData.email, password);
             await cred.user.sendEmailVerification();
 
@@ -188,6 +310,16 @@ const DriverAuth = (() => {
         let driverSnap;
 
         if (firebaseUser) {
+            try {
+                await firebaseUser.getIdToken(true);
+            } catch (err) {
+                console.warn('Sessão do entregador inválida ou revogada:', err?.code || err?.message || err);
+                clearSession();
+                await auth.signOut();
+                showToast('Sessão expirada. Faça login novamente.');
+                return null;
+            }
+
             // Find by authUid
             driverSnap = await db.collection('drivers')
                 .where('authUid', '==', firebaseUser.uid)
@@ -208,6 +340,11 @@ const DriverAuth = (() => {
                 showToast('Sessão temporária expirada. Faça login novamente.');
                 return null;
             }
+            if (data.sessionRevokedAt || data.status === 'blocked') {
+                clearSession();
+                showToast('Sessão encerrada pelo administrador.');
+                return null;
+            }
             return data;
         }
 
@@ -216,9 +353,9 @@ const DriverAuth = (() => {
         const data = { id: driverSnap.docs[0].id, ...driverSnap.docs[0].data() };
 
         // Check status
-        if (data.status === 'blocked') {
+        if (data.status === 'blocked' || data.sessionRevokedAt) {
             await auth.signOut();
-            showToast('Conta bloqueada');
+            showToast(data.sessionRevokedAt ? 'Sessão encerrada pelo administrador' : 'Conta bloqueada');
             return null;
         }
         if (data.status === 'pending') {
@@ -250,7 +387,7 @@ const DriverAuth = (() => {
     // ==================== PASSWORD CHANGE ====================
     // Driver changes their own password (requires current password)
     async function changePassword(currentPassword, newPassword) {
-        const user = auth.currentUser;
+        const user = getAuth().currentUser;
         if (!user) {
             showToast('Faça login primeiro');
             return false;
@@ -294,7 +431,7 @@ const DriverAuth = (() => {
 
     // ==================== EMAIL CHANGE ====================
     async function changeEmail(newEmail, currentPassword) {
-        const user = auth.currentUser;
+            const user = getAuth().currentUser;
         if (!user) { showToast('Faça login primeiro'); return false; }
         if (!newEmail || !newEmail.includes('@')) { showToast('Email inválido'); return false; }
 
@@ -332,7 +469,7 @@ const DriverAuth = (() => {
 
     // ==================== RESEND VERIFICATION ====================
     async function resendVerification() {
-        const user = auth.currentUser;
+        const user = getAuth().currentUser;
         if (!user) { showToast('Faça login primeiro'); return; }
         if (user.emailVerified) { showToast('Email já verificado'); return; }
 
@@ -366,6 +503,7 @@ const DriverAuth = (() => {
     // ==================== PUBLIC API ====================
     return {
         login,
+        register,
         validateSession,
         changePassword,
         changeEmail,
