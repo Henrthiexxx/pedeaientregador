@@ -19,6 +19,10 @@
             <p>Entregador</p>
         </div>
         <div class="auth-box">
+            <div class="auth-tabs" style="display:flex;gap:8px;margin-bottom:16px;">
+                <button type="button" class="btn btn-primary btn-block" id="tabLogin" onclick="switchAuthTab('login')">Entrar</button>
+                <button type="button" class="btn btn-secondary btn-block" id="tabRegister" onclick="switchAuthTab('register')">Criar conta</button>
+            </div>
             <form id="loginForm">
                 <div class="form-group">
                     <label class="form-label">E-mail</label>
@@ -30,7 +34,46 @@
                 </div>
                 <button type="submit" class="btn btn-primary btn-block" id="loginBtn">Entrar</button>
             </form>
-            <p class="auth-hint">Credenciais fornecidas pelo administrador</p>
+            <form id="registerForm" style="display:none;">
+                <div class="form-group">
+                    <label class="form-label">Nome completo</label>
+                    <input type="text" class="form-input" id="registerName" placeholder="Seu nome" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">E-mail</label>
+                    <input type="email" class="form-input" id="registerEmail" placeholder="seu@email.com" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Telefone</label>
+                    <input type="tel" class="form-input" id="registerPhone" placeholder="(00) 00000-0000" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">CPF</label>
+                    <input type="text" class="form-input" id="registerCPF" placeholder="000.000.000-00" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Veículo</label>
+                    <select class="form-input" id="registerVehicle">
+                        <option value="moto">🏍️ Moto</option>
+                        <option value="bicicleta">🚲 Bicicleta</option>
+                        <option value="carro">🚗 Carro</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Placa</label>
+                    <input type="text" class="form-input" id="registerPlate" placeholder="ABC-1234">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">PIX</label>
+                    <input type="text" class="form-input" id="registerPix" placeholder="Chave PIX">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Senha</label>
+                    <input type="password" class="form-input" id="registerPassword" placeholder="Mínimo 6 caracteres" required>
+                </div>
+                <button type="submit" class="btn btn-primary btn-block" id="registerBtn">Criar conta</button>
+            </form>
+            <p class="auth-hint" id="authHint">Credenciais fornecidas pelo administrador</p>
         </div>
     </div>
 
@@ -38,6 +81,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js"></script>
 <script src="modules/fcm.js"></script>
+    <script src="modules/driver-auth.js"></script>
     <script src="modules/cache.js"></script>
     <script src="modules/firebase-init.js"></script>
     <script>
@@ -60,6 +104,17 @@
             t.textContent = msg;
             t.classList.add('show');
             setTimeout(() => t.classList.remove('show'), 3000);
+        }
+
+        function switchAuthTab(tab) {
+            const isLogin = tab === 'login';
+            document.getElementById('loginForm').style.display = isLogin ? 'block' : 'none';
+            document.getElementById('registerForm').style.display = isLogin ? 'none' : 'block';
+            document.getElementById('tabLogin').className = isLogin ? 'btn btn-primary btn-block' : 'btn btn-secondary btn-block';
+            document.getElementById('tabRegister').className = isLogin ? 'btn btn-secondary btn-block' : 'btn btn-primary btn-block';
+            document.getElementById('authHint').textContent = isLogin
+                ? 'Credenciais fornecidas pelo administrador'
+                : 'Seu cadastro ficará pendente até aprovação do administrador';
         }
 
         document.getElementById('loginForm').addEventListener('submit', async (e) => {
@@ -112,6 +167,33 @@
                 showToast('Erro ao entrar');
                 btn.disabled = false;
                 btn.textContent = 'Entrar';
+            }
+        });
+
+        document.getElementById('registerForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('registerBtn');
+            btn.disabled = true;
+            btn.textContent = 'Enviando...';
+
+            try {
+                const ok = await DriverAuth.register({
+                    name: document.getElementById('registerName').value,
+                    email: document.getElementById('registerEmail').value,
+                    phone: document.getElementById('registerPhone').value,
+                    cpf: document.getElementById('registerCPF').value,
+                    vehicle: document.getElementById('registerVehicle').value,
+                    plate: document.getElementById('registerPlate').value,
+                    pix: document.getElementById('registerPix').value,
+                    password: document.getElementById('registerPassword').value
+                });
+                if (ok) {
+                    e.target.reset();
+                    switchAuthTab('login');
+                }
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Criar conta';
             }
         });
     </script>
