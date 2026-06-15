@@ -155,12 +155,12 @@
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label class="form-label">Telefone</label>
-                        <input type="tel" class="form-input" id="registerPhone" placeholder="(00) 00000-0000" required>
+                    <label class="form-label">Telefone</label>
+                        <input type="tel" class="form-input" id="registerPhone" placeholder="(00) 00000-0000" inputmode="numeric" maxlength="15" required>
                     </div>
                     <div class="form-group">
                         <label class="form-label">CPF</label>
-                        <input type="text" class="form-input" id="registerCPF" placeholder="000.000.000-00" required>
+                        <input type="text" class="form-input" id="registerCPF" placeholder="000.000.000-00" inputmode="numeric" maxlength="14" required>
                     </div>
                 </div>
                 <div class="form-row">
@@ -174,7 +174,7 @@
                     </div>
                     <div class="form-group">
                         <label class="form-label">Placa</label>
-                        <input type="text" class="form-input" id="registerPlate" placeholder="ABC-1234">
+                        <input type="text" class="form-input" id="registerPlate" placeholder="ABC-1234" maxlength="8">
                     </div>
                 </div>
                 <div class="form-group">
@@ -183,7 +183,7 @@
                 </div>
                 <div class="form-group">
                     <label class="form-label">Instagram (@ opcional)</label>
-                    <input type="text" class="form-input" id="registerInstagram" placeholder="@seuusuario">
+                    <input type="text" class="form-input" id="registerInstagram" placeholder="@seuusuario" maxlength="31">
                 </div>
                 <div class="form-group">
                     <label class="form-label">Dias disponíveis</label>
@@ -212,6 +212,7 @@
     </div>
 
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js"></script>
 <script src="modules/fcm.js"></script>
@@ -326,10 +327,10 @@
                 const ok = await DriverAuth.register({
                     name: document.getElementById('registerName').value,
                     email: document.getElementById('registerEmail').value,
-                    phone: document.getElementById('registerPhone').value,
-                    cpf: document.getElementById('registerCPF').value,
+                    phone: document.getElementById('registerPhone').value.replace(/\D/g, ''),
+                    cpf: document.getElementById('registerCPF').value.replace(/\D/g, ''),
                     vehicle: document.getElementById('registerVehicle').value,
-                    plate: document.getElementById('registerPlate').value,
+                    plate: document.getElementById('registerPlate').value.toUpperCase(),
                     pix: document.getElementById('registerPix').value,
                     instagramHandle: document.getElementById('registerInstagram').value,
                     availableDays: getSelectedValues('registerDays'),
