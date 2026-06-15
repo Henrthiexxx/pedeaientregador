@@ -2,26 +2,136 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Entregador</title>
-    <meta name="theme-color" content="#000000">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Entregador · Pedra Delivery</title>
+    <meta name="theme-color" content="#060606">
     <link rel="manifest" href="manifest.json">
     <link rel="icon" href="icon-192.png">
     <link rel="apple-touch-icon" href="icon-192.png">
     <link rel="stylesheet" href="index.css">
+    <style>
+    @keyframes appIn { from { opacity:0; transform:scale(1.025) } to { opacity:1; transform:scale(1) } }
+    @keyframes glowPulse { 0%,100% { opacity:.55 } 50% { opacity:.85 } }
+    @keyframes drift { 0% { transform:translateY(0) translateX(0); opacity:0 } 10% { opacity:.5 } 90% { opacity:.5 } 100% { transform:translateY(-180px) translateX(14px); opacity:0 } }
+
+    :root {
+      --g:        #22c55e;
+      --neon:     #2dff9e;
+      --neon-soft: rgba(45,255,158,.14);
+      --neon-line: rgba(45,255,158,.28);
+      --ink-0:    #f4f5f4;
+      --ink-1:    #c4c8c6;
+      --ink-2:    #7d847f;
+      --ink-3:    #4a504c;
+      --glass:    rgba(18,20,19,.66);
+      --glass-2:  rgba(22,25,23,.78);
+      --hair:     rgba(255,255,255,.06);
+    }
+    * { box-sizing:border-box }
+
+    /* ── Auth page ── */
+    body{
+      margin:0;min-height:100dvh;
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+      color:var(--ink-0);background:#060606;overflow-x:hidden;
+    }
+    .auth-wrap{
+      position:relative;z-index:1;min-height:100dvh;
+      display:flex;flex-direction:column;align-items:center;justify-content:center;
+      padding:calc(env(safe-area-inset-top,0px) + 30px) 18px calc(env(safe-area-inset-bottom,0px) + 30px);
+      animation:appIn .26s cubic-bezier(.16,1,.3,1) both;
+    }
+
+    /* ── Ambient background layers ── */
+    .amb{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+    .amb-glow{position:absolute;top:-22%;right:-18%;width:78vw;height:78vw;max-width:560px;max-height:560px;
+      background:radial-gradient(circle at 50% 50%, rgba(45,255,158,.22) 0%, rgba(34,197,94,.10) 38%, transparent 70%);
+      filter:blur(8px);animation:glowPulse 7s ease-in-out infinite}
+    .amb-glow.b{top:auto;bottom:-26%;right:auto;left:-24%;width:70vw;height:70vw;max-width:480px;max-height:480px;
+      background:radial-gradient(circle at 50% 50%, rgba(34,197,94,.10) 0%, transparent 68%);animation-duration:9s}
+    .amb-grain{position:absolute;inset:0;
+      background:radial-gradient(ellipse 120% 50% at 50% -10%, rgba(20,40,30,.5) 0%, transparent 60%),
+      linear-gradient(180deg, transparent 0%, rgba(0,0,0,.4) 100%)}
+    .particles{position:absolute;inset:0}
+    .particles span{position:absolute;bottom:-12px;border-radius:50%;background:var(--neon);box-shadow:0 0 6px rgba(45,255,158,.8);animation:drift linear infinite}
+
+    /* ── Brand ── */
+    .auth-brand{display:flex;align-items:center;gap:11px;margin-bottom:24px}
+    .auth-brand-mark{width:46px;height:46px;border-radius:13px;overflow:hidden;flex-shrink:0;
+      box-shadow:0 6px 20px rgba(0,0,0,.5),0 0 0 1px var(--neon-line),0 0 26px rgba(45,255,158,.25)}
+    .auth-brand-mark img{width:100%;height:100%;object-fit:cover;display:block}
+    .auth-brand-text{font-size:1.5rem;font-weight:800;letter-spacing:-.03em;color:var(--ink-0)}
+    .auth-brand-text span{color:var(--neon)}
+    .auth-brand-badge{display:inline-block;margin-top:3px;font-size:.62rem;font-weight:800;letter-spacing:.16em;
+      text-transform:uppercase;color:var(--neon);background:var(--neon-soft);border:1px solid var(--neon-line);
+      padding:2px 8px;border-radius:999px}
+
+    /* ── Card ── */
+    .auth-card{
+      width:100%;max-width:404px;position:relative;overflow:hidden;border-radius:26px;padding:24px 22px;
+      background:radial-gradient(120% 90% at 100% 0%, rgba(45,255,158,.10) 0%, transparent 52%),var(--glass);
+      border:1px solid var(--neon-line);
+      -webkit-backdrop-filter:blur(26px) saturate(150%);backdrop-filter:blur(26px) saturate(150%);
+      box-shadow:0 22px 50px rgba(0,0,0,.55),0 1px 0 rgba(255,255,255,.06) inset;
+    }
+    .auth-card::after{content:"";position:absolute;top:0;right:0;width:150px;height:150px;
+      background:radial-gradient(circle at 100% 0%, rgba(45,255,158,.28) 0%, transparent 62%);pointer-events:none;opacity:.7}
+
+    /* ── Tabs ── */
+    .tabs{display:flex;gap:6px;margin-bottom:20px;background:rgba(255,255,255,.04);border:1px solid var(--hair);border-radius:14px;padding:4px;position:relative;z-index:1}
+    .tab{flex:1;padding:10px;text-align:center;font-size:.84rem;font-weight:700;cursor:pointer;background:transparent;color:var(--ink-2);border:none;border-radius:10px;font-family:inherit;transition:.18s}
+    .tab.active{background:linear-gradient(180deg,var(--neon),var(--g));color:#04130b;box-shadow:0 5px 14px rgba(34,197,94,.35)}
+
+    /* ── Form ── */
+    .form-group{margin-bottom:14px;position:relative;z-index:1}
+    .form-row{display:flex;gap:10px}
+    .form-row .form-group{flex:1}
+    .form-label{display:block;font-size:.68rem;color:var(--ink-2);margin-bottom:6px;font-weight:700;text-transform:uppercase;letter-spacing:.07em}
+    .form-input{width:100%;padding:13px 14px;background:rgba(255,255,255,.04);border:1px solid var(--hair);border-radius:13px;color:var(--ink-0);font-family:inherit;font-size:.9rem;transition:.16s}
+    .form-input:focus{outline:none;border-color:var(--neon-line);background:rgba(45,255,158,.05);box-shadow:0 0 0 3px rgba(45,255,158,.10)}
+    .form-input::placeholder{color:var(--ink-3)}
+    select.form-input{appearance:none;-webkit-appearance:none;cursor:pointer}
+    select.form-input option{background:#101311;color:var(--ink-0)}
+    select.form-input[multiple]{padding:8px;height:auto}
+    select.form-input[multiple] option{padding:7px 9px;border-radius:8px;margin-bottom:2px}
+
+    /* ── Submit ── */
+    .btn-submit{width:100%;display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:14px;border-radius:15px;cursor:pointer;
+      font-family:inherit;font-size:.92rem;font-weight:800;letter-spacing:-.01em;color:#04130b;border:none;
+      background:linear-gradient(180deg,var(--neon) 0%,var(--g) 100%);
+      box-shadow:0 6px 18px rgba(34,197,94,.4),inset 0 1px 0 rgba(255,255,255,.35);
+      transition:transform .14s,box-shadow .14s,opacity .14s;margin-top:4px}
+    .btn-submit:hover{transform:translateY(-2px);box-shadow:0 10px 26px rgba(34,197,94,.5)}
+    .btn-submit:active{transform:translateY(0)}
+    .btn-submit:disabled{opacity:.55;cursor:not-allowed;transform:none}
+
+    /* ── Hint ── */
+    .auth-hint{text-align:center;color:var(--ink-3);font-size:.74rem;margin-top:16px;position:relative;z-index:1;line-height:1.4}
+    </style>
 </head>
 <body>
     <div class="toast" id="toast"></div>
 
-    <div class="auth-container">
-        <div class="auth-logo">
-            <h1>Pedra Delivery</h1>
-            <p>Entregador</p>
+    <!-- Ambient background -->
+    <div class="amb" id="amb">
+        <div class="amb-glow"></div>
+        <div class="amb-glow b"></div>
+        <div class="amb-grain"></div>
+        <div class="particles" id="particles"></div>
+    </div>
+
+    <div class="auth-wrap">
+        <div class="auth-brand">
+            <div class="auth-brand-mark"><img src="icon-192.png" alt="Pedra Delivery"></div>
+            <div>
+                <div class="auth-brand-text"><span>Pedra</span> Delivery</div>
+                <div class="auth-brand-badge">Entregador</div>
+            </div>
         </div>
-        <div class="auth-box">
-            <div class="auth-tabs" style="display:flex;gap:8px;margin-bottom:16px;">
-                <button type="button" class="btn btn-primary btn-block" id="tabLogin" onclick="switchAuthTab('login')">Entrar</button>
-                <button type="button" class="btn btn-secondary btn-block" id="tabRegister" onclick="switchAuthTab('register')">Criar conta</button>
+        <div class="auth-card">
+            <div class="tabs">
+                <button type="button" class="tab active" id="tabLogin" onclick="switchAuthTab('login')">Entrar</button>
+                <button type="button" class="tab" id="tabRegister" onclick="switchAuthTab('register')">Criar conta</button>
             </div>
             <form id="loginForm">
                 <div class="form-group">
@@ -32,7 +142,7 @@
                     <label class="form-label">Senha</label>
                     <input type="password" class="form-input" id="loginPassword" placeholder="••••••••" required>
                 </div>
-                <button type="submit" class="btn btn-primary btn-block" id="loginBtn">Entrar</button>
+                <button type="submit" class="btn-submit" id="loginBtn">Entrar</button>
             </form>
             <form id="registerForm" style="display:none;">
                 <div class="form-group">
@@ -43,35 +153,59 @@
                     <label class="form-label">E-mail</label>
                     <input type="email" class="form-input" id="registerEmail" placeholder="seu@email.com" required>
                 </div>
-                <div class="form-group">
-                    <label class="form-label">Telefone</label>
-                    <input type="tel" class="form-input" id="registerPhone" placeholder="(00) 00000-0000" required>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Telefone</label>
+                        <input type="tel" class="form-input" id="registerPhone" placeholder="(00) 00000-0000" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">CPF</label>
+                        <input type="text" class="form-input" id="registerCPF" placeholder="000.000.000-00" required>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label class="form-label">CPF</label>
-                    <input type="text" class="form-input" id="registerCPF" placeholder="000.000.000-00" required>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Veículo</label>
-                    <select class="form-input" id="registerVehicle">
-                        <option value="moto">🏍️ Moto</option>
-                        <option value="bicicleta">🚲 Bicicleta</option>
-                        <option value="carro">🚗 Carro</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Placa</label>
-                    <input type="text" class="form-input" id="registerPlate" placeholder="ABC-1234">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Veículo</label>
+                        <select class="form-input" id="registerVehicle">
+                            <option value="moto">🏍️ Moto</option>
+                            <option value="bicicleta">🚲 Bicicleta</option>
+                            <option value="carro">🚗 Carro</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Placa</label>
+                        <input type="text" class="form-input" id="registerPlate" placeholder="ABC-1234">
+                    </div>
                 </div>
                 <div class="form-group">
                     <label class="form-label">PIX</label>
                     <input type="text" class="form-input" id="registerPix" placeholder="Chave PIX">
                 </div>
                 <div class="form-group">
+                    <label class="form-label">Instagram (@ opcional)</label>
+                    <input type="text" class="form-input" id="registerInstagram" placeholder="@seuusuario">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Dias disponíveis</label>
+                    <select class="form-input" id="registerDays" multiple size="5">
+                        <option value="seg">Segunda</option>
+                        <option value="ter">Terça</option>
+                        <option value="qua">Quarta</option>
+                        <option value="qui">Quinta</option>
+                        <option value="sex">Sexta</option>
+                        <option value="sab">Sábado</option>
+                        <option value="dom">Domingo</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Horários disponíveis</label>
+                    <input type="text" class="form-input" id="registerHours" placeholder="Ex: 08:00-12:00, 14:00-18:00">
+                </div>
+                <div class="form-group">
                     <label class="form-label">Senha</label>
                     <input type="password" class="form-input" id="registerPassword" placeholder="Mínimo 6 caracteres" required>
                 </div>
-                <button type="submit" class="btn btn-primary btn-block" id="registerBtn">Criar conta</button>
+                <button type="submit" class="btn-submit" id="registerBtn">Criar conta</button>
             </form>
             <p class="auth-hint" id="authHint">Credenciais fornecidas pelo administrador</p>
         </div>
@@ -102,11 +236,31 @@
             const isLogin = tab === 'login';
             document.getElementById('loginForm').style.display = isLogin ? 'block' : 'none';
             document.getElementById('registerForm').style.display = isLogin ? 'none' : 'block';
-            document.getElementById('tabLogin').className = isLogin ? 'btn btn-primary btn-block' : 'btn btn-secondary btn-block';
-            document.getElementById('tabRegister').className = isLogin ? 'btn btn-secondary btn-block' : 'btn btn-primary btn-block';
+            document.getElementById('tabLogin').classList.toggle('active', isLogin);
+            document.getElementById('tabRegister').classList.toggle('active', !isLogin);
             document.getElementById('authHint').textContent = isLogin
                 ? 'Credenciais fornecidas pelo administrador'
                 : 'Seu cadastro ficará pendente até aprovação do administrador';
+        }
+
+        // Ambient particles
+        (function spawnParticles(){
+            const wrap = document.getElementById('particles');
+            if (!wrap || wrap.childElementCount) return;
+            for (let i = 0; i < 16; i++) {
+                const s = document.createElement('span');
+                const sz = 2 + Math.random() * 2.5;
+                s.style.width = s.style.height = sz + 'px';
+                s.style.left = Math.random() * 100 + '%';
+                const dur = 9 + Math.random() * 10;
+                s.style.animationDuration = dur + 's';
+                s.style.animationDelay = (-Math.random() * dur) + 's';
+                wrap.appendChild(s);
+            }
+        })();
+
+        function getSelectedValues(selectId) {
+            return Array.from(document.getElementById(selectId)?.selectedOptions || []).map(option => option.value);
         }
 
         document.getElementById('loginForm').addEventListener('submit', async (e) => {
@@ -177,6 +331,9 @@
                     vehicle: document.getElementById('registerVehicle').value,
                     plate: document.getElementById('registerPlate').value,
                     pix: document.getElementById('registerPix').value,
+                    instagramHandle: document.getElementById('registerInstagram').value,
+                    availableDays: getSelectedValues('registerDays'),
+                    availableHours: document.getElementById('registerHours').value.split(',').map(s => s.trim()).filter(Boolean),
                     password: document.getElementById('registerPassword').value
                 });
                 if (ok) {

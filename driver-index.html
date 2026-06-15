@@ -68,6 +68,26 @@
                     <input type="text" class="form-input" id="registerPix" placeholder="Chave PIX">
                 </div>
                 <div class="form-group">
+                    <label class="form-label">Instagram (@ opcional)</label>
+                    <input type="text" class="form-input" id="registerInstagram" placeholder="@seuusuario">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Dias disponíveis</label>
+                    <select class="form-input" id="registerDays" multiple size="5">
+                        <option value="seg">Segunda</option>
+                        <option value="ter">Terça</option>
+                        <option value="qua">Quarta</option>
+                        <option value="qui">Quinta</option>
+                        <option value="sex">Sexta</option>
+                        <option value="sab">Sábado</option>
+                        <option value="dom">Domingo</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Horários disponíveis</label>
+                    <input type="text" class="form-input" id="registerHours" placeholder="Ex: 08:00-12:00, 14:00-18:00">
+                </div>
+                <div class="form-group">
                     <label class="form-label">Senha</label>
                     <input type="password" class="form-input" id="registerPassword" placeholder="Mínimo 6 caracteres" required>
                 </div>
@@ -115,6 +135,10 @@
             document.getElementById('authHint').textContent = isLogin
                 ? 'Credenciais fornecidas pelo administrador'
                 : 'Seu cadastro ficará pendente até aprovação do administrador';
+        }
+
+        function getSelectedValues(selectId) {
+            return Array.from(document.getElementById(selectId)?.selectedOptions || []).map(option => option.value);
         }
 
         document.getElementById('loginForm').addEventListener('submit', async (e) => {
@@ -185,6 +209,9 @@
                     vehicle: document.getElementById('registerVehicle').value,
                     plate: document.getElementById('registerPlate').value,
                     pix: document.getElementById('registerPix').value,
+                    instagramHandle: document.getElementById('registerInstagram').value,
+                    availableDays: getSelectedValues('registerDays'),
+                    availableHours: document.getElementById('registerHours').value.split(',').map(s => s.trim()).filter(Boolean),
                     password: document.getElementById('registerPassword').value
                 });
                 if (ok) {
