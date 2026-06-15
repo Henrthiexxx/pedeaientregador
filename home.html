@@ -148,11 +148,13 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>window.PEDRAD_DRIVER_APP_VERSION = '1.0.0';</script>
     <script src="./modules/cache.js"></script>
     <script src="./modules/firebase-init.js"></script>
     <script src="./modules/shared.js"></script>
     <script src="./modules/idle.js"></script>
     <script src="./modules/fcm.js"></script>
+    <script src="./modules/update-guard.js"></script>
     <script src="./home-core.js"></script>
     <script src="./home-ui.js"></script>
 
@@ -160,6 +162,8 @@
     document.addEventListener('DOMContentLoaded', async () => {
         const ok = await checkAuth();
         if (!ok) return;
+        const updateOk = await AppUpdateGuard.checkAndBlockIfNeeded();
+        if (!updateOk) return;
 
         renderBottomNav('home.html');
 

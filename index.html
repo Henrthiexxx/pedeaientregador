@@ -155,12 +155,12 @@
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                    <label class="form-label">Telefone</label>
-                        <input type="tel" class="form-input" id="registerPhone" placeholder="(00) 00000-0000" inputmode="numeric" maxlength="15" required>
+                        <label class="form-label">Telefone</label>
+                        <input type="tel" class="form-input" id="registerPhone" placeholder="(00) 00000-0000" inputmode="numeric" maxlength="15" required oninput="maskPhone(this)">
                     </div>
                     <div class="form-group">
                         <label class="form-label">CPF</label>
-                        <input type="text" class="form-input" id="registerCPF" placeholder="000.000.000-00" inputmode="numeric" maxlength="14" required>
+                        <input type="text" class="form-input" id="registerCPF" placeholder="000.000.000-00" inputmode="numeric" maxlength="14" required oninput="maskCPF(this)">
                     </div>
                 </div>
                 <div class="form-row">
@@ -174,7 +174,7 @@
                     </div>
                     <div class="form-group">
                         <label class="form-label">Placa</label>
-                        <input type="text" class="form-input" id="registerPlate" placeholder="ABC-1234" maxlength="8">
+                        <input type="text" class="form-input" id="registerPlate" placeholder="ABC-1234" maxlength="8" oninput="maskPlate(this)">
                     </div>
                 </div>
                 <div class="form-group">
@@ -183,7 +183,7 @@
                 </div>
                 <div class="form-group">
                     <label class="form-label">Instagram (@ opcional)</label>
-                    <input type="text" class="form-input" id="registerInstagram" placeholder="@seuusuario" maxlength="31">
+                    <input type="text" class="form-input" id="registerInstagram" placeholder="@seuusuario" maxlength="31" oninput="maskInstagram(this)">
                 </div>
                 <div class="form-group">
                     <label class="form-label">Dias disponíveis</label>
@@ -203,7 +203,12 @@
                 </div>
                 <div class="form-group">
                     <label class="form-label">Senha</label>
-                    <input type="password" class="form-input" id="registerPassword" placeholder="Mínimo 6 caracteres" required>
+                    <input type="password" class="form-input" id="registerPassword" placeholder="8+ caracteres, maiúscula, minúscula e número" minlength="8" maxlength="32" required oninput="updatePasswordStrength()">
+                    <div id="passwordStrength" class="auth-hint" style="text-align:left;margin-top:6px;">Força da senha: -</div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Confirmar senha</label>
+                    <input type="password" class="form-input" id="registerConfirmPassword" placeholder="Repita a senha" minlength="8" maxlength="32" required>
                 </div>
                 <button type="submit" class="btn-submit" id="registerBtn">Criar conta</button>
             </form>
@@ -216,21 +221,65 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js"></script>
 <script src="modules/fcm.js"></script>
+    <script>window.PEDRAD_DRIVER_APP_VERSION = '1.0.0';</script>
     <script src="modules/driver-auth.js"></script>
+    <script src="modules/update-guard.js"></script>
     <script src="modules/cache.js"></script>
     <script src="modules/firebase-init.js"></script>
     <script>
-        // If already logged in, go to home
-        const savedId = localStorage.getItem('pedrad_driver_id');
-        if (savedId) {
-            window.location.href = 'home.html';
-        }
+        (async () => {
+            const updateOk = await AppUpdateGuard.checkAndBlockIfNeeded();
+            if (!updateOk) return;
+
+            // If already logged in, go to home
+            const savedId = localStorage.getItem('pedrad_driver_id');
+            if (savedId) {
+                window.location.href = 'home.html';
+                return;
+            }
+        })();
 
         function showToast(msg) {
             const t = document.getElementById('toast');
             t.textContent = msg;
             t.classList.add('show');
             setTimeout(() => t.classList.remove('show'), 3000);
+        }
+
+        function maskPhone(el) {
+            const digits = el.value.replace(/\D/g, '').slice(0, 11);
+            el.value = digits.length <= 10
+                ? digits.replace(/^(\d{2})(\d{0,4})(\d{0,4}).*/, (_, a, b, c) => b ? `(${a}) ${b}${c ? '-' + c : ''}` : `(${a}`)
+                : digits.replace(/^(\d{2})(\d{0,5})(\d{0,4}).*/, (_, a, b, c) => `(${a}) ${b}${c ? '-' + c : ''}`);
+        }
+
+        function maskCPF(el) {
+            const d = el.value.replace(/\D/g, '').slice(0, 11);
+            el.value = d.replace(/^(\d{0,3})(\d{0,3})(\d{0,3})(\d{0,2}).*/, (_, a, b, c, e) =>
+                [a, b, c].filter(Boolean).join('.') + (e ? '-' + e : '')
+            );
+        }
+
+        function maskPlate(el) {
+            const v = el.value.toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 8);
+            el.value = v.replace(/-/g, '').replace(/^([A-Z]{3})(\d{0,4}).*/, (_, a, b) => `${a}${b ? '-' + b : ''}`);
+        }
+
+        function maskInstagram(el) {
+            el.value = '@' + el.value.replace(/^@+/, '').replace(/[^A-Za-z0-9._]/g, '').slice(0, 30);
+        }
+
+        function isStrongPassword(pw) {
+            return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/.test(pw);
+        }
+
+        function updatePasswordStrength() {
+            const pw = document.getElementById('registerPassword').value;
+            const out = document.getElementById('passwordStrength');
+            if (!pw) { out.textContent = 'Força da senha: -'; return; }
+            out.textContent = isStrongPassword(pw)
+                ? 'Força da senha: forte'
+                : 'Força da senha: fraca';
         }
 
         function switchAuthTab(tab) {
@@ -335,7 +384,8 @@
                     instagramHandle: document.getElementById('registerInstagram').value,
                     availableDays: getSelectedValues('registerDays'),
                     availableHours: document.getElementById('registerHours').value.split(',').map(s => s.trim()).filter(Boolean),
-                    password: document.getElementById('registerPassword').value
+                    password: document.getElementById('registerPassword').value,
+                    confirmPassword: document.getElementById('registerConfirmPassword').value
                 });
                 if (ok) {
                     e.target.reset();
