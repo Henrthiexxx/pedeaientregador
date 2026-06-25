@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Entregador · Pedra Delivery</title>
+    <title>Cadastro de Entregador · Pedra Delivery</title>
+    <meta name="description" content="Cadastro de entregadores da Pedra Delivery.">
     <meta name="theme-color" content="#060606">
     <link rel="manifest" href="manifest.json">
     <link rel="icon" href="icon-192.png">
@@ -28,8 +29,6 @@
       --hair:     rgba(255,255,255,.06);
     }
     * { box-sizing:border-box }
-
-    /* ── Auth page ── */
     body{
       margin:0;min-height:100dvh;
       font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
@@ -41,8 +40,6 @@
       padding:calc(env(safe-area-inset-top,0px) + 30px) 18px calc(env(safe-area-inset-bottom,0px) + 30px);
       animation:appIn .26s cubic-bezier(.16,1,.3,1) both;
     }
-
-    /* ── Ambient background layers ── */
     .amb{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
     .amb-glow{position:absolute;top:-22%;right:-18%;width:78vw;height:78vw;max-width:560px;max-height:560px;
       background:radial-gradient(circle at 50% 50%, rgba(45,255,158,.22) 0%, rgba(34,197,94,.10) 38%, transparent 70%);
@@ -55,7 +52,6 @@
     .particles{position:absolute;inset:0}
     .particles span{position:absolute;bottom:-12px;border-radius:50%;background:var(--neon);box-shadow:0 0 6px rgba(45,255,158,.8);animation:drift linear infinite}
 
-    /* ── Brand ── */
     .auth-brand{display:flex;align-items:center;gap:11px;margin-bottom:24px}
     .auth-brand-mark{width:46px;height:46px;border-radius:13px;overflow:hidden;flex-shrink:0;
       box-shadow:0 6px 20px rgba(0,0,0,.5),0 0 0 1px var(--neon-line),0 0 26px rgba(45,255,158,.25)}
@@ -66,7 +62,6 @@
       text-transform:uppercase;color:var(--neon);background:var(--neon-soft);border:1px solid var(--neon-line);
       padding:2px 8px;border-radius:999px}
 
-    /* ── Card ── */
     .auth-card{
       width:100%;max-width:404px;position:relative;overflow:hidden;border-radius:26px;padding:24px 22px;
       background:radial-gradient(120% 90% at 100% 0%, rgba(45,255,158,.10) 0%, transparent 52%),var(--glass);
@@ -77,12 +72,16 @@
     .auth-card::after{content:"";position:absolute;top:0;right:0;width:150px;height:150px;
       background:radial-gradient(circle at 100% 0%, rgba(45,255,158,.28) 0%, transparent 62%);pointer-events:none;opacity:.7}
 
-    /* ── Tabs ── */
-    .tabs{display:flex;gap:6px;margin-bottom:20px;background:rgba(255,255,255,.04);border:1px solid var(--hair);border-radius:14px;padding:4px;position:relative;z-index:1}
-    .tab{flex:1;padding:10px;text-align:center;font-size:.84rem;font-weight:700;cursor:pointer;background:transparent;color:var(--ink-2);border:none;border-radius:10px;font-family:inherit;transition:.18s}
-    .tab.active{background:linear-gradient(180deg,var(--neon),var(--g));color:#04130b;box-shadow:0 5px 14px rgba(34,197,94,.35)}
+    .card-eyebrow{
+      display:inline-flex;align-items:center;gap:7px;margin-bottom:10px;
+      padding:6px 12px;border-radius:999px;
+      font-size:.68rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
+      color:var(--neon);background:var(--neon-soft);border:1px solid var(--neon-line);position:relative;z-index:1;
+    }
+    .card-eyebrow::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--neon);box-shadow:0 0 8px var(--neon)}
+    .card-title{position:relative;z-index:1;margin:0 0 8px;font-size:1.35rem;line-height:1.15;letter-spacing:-.03em}
+    .card-copy{position:relative;z-index:1;margin:0 0 18px;color:var(--ink-2);font-size:.88rem;line-height:1.5}
 
-    /* ── Form ── */
     .form-group{margin-bottom:14px;position:relative;z-index:1}
     .form-row{display:flex;gap:10px}
     .form-row .form-group{flex:1}
@@ -95,7 +94,6 @@
     select.form-input[multiple]{padding:8px;height:auto}
     select.form-input[multiple] option{padding:7px 9px;border-radius:8px;margin-bottom:2px}
 
-    /* ── Submit ── */
     .btn-submit{width:100%;display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:14px;border-radius:15px;cursor:pointer;
       font-family:inherit;font-size:.92rem;font-weight:800;letter-spacing:-.01em;color:#04130b;border:none;
       background:linear-gradient(180deg,var(--neon) 0%,var(--g) 100%);
@@ -105,15 +103,15 @@
     .btn-submit:active{transform:translateY(0)}
     .btn-submit:disabled{opacity:.55;cursor:not-allowed;transform:none}
 
-    /* ── Hint ── */
     .auth-hint{text-align:center;color:var(--ink-3);font-size:.74rem;margin-top:16px;position:relative;z-index:1;line-height:1.4}
+    .auth-back{display:inline-flex;align-items:center;justify-content:center;margin-top:12px;color:var(--ink-2);text-decoration:none;font-size:.84rem;position:relative;z-index:1}
+    .auth-back:hover{color:var(--ink-0)}
     </style>
 </head>
 <body>
     <div class="toast" id="toast"></div>
 
-    <!-- Ambient background -->
-    <div class="amb" id="amb">
+    <div class="amb" aria-hidden="true">
         <div class="amb-glow"></div>
         <div class="amb-glow b"></div>
         <div class="amb-grain"></div>
@@ -128,23 +126,13 @@
                 <div class="auth-brand-badge">Entregador</div>
             </div>
         </div>
+
         <div class="auth-card">
-            <div class="tabs">
-                <button type="button" class="tab active" id="tabLogin" onclick="switchAuthTab('login')">Entrar</button>
-                <button type="button" class="tab" id="tabRegister" onclick="switchAuthTab('register')">Criar conta</button>
-            </div>
-            <form id="loginForm">
-                <div class="form-group">
-                    <label class="form-label">E-mail</label>
-                    <input type="email" class="form-input" id="loginEmail" placeholder="seu@email.com" required>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Senha</label>
-                    <input type="password" class="form-input" id="loginPassword" placeholder="••••••••" required>
-                </div>
-                <button type="submit" class="btn-submit" id="loginBtn">Entrar</button>
-            </form>
-            <form id="registerForm" style="display:none;">
+            <div class="card-eyebrow">Criar conta</div>
+            <h1 class="card-title">Cadastro de entregador</h1>
+            <p class="card-copy">Preencha seus dados para solicitar acesso. Seu cadastro ficará pendente até aprovação do administrador.</p>
+
+            <form id="registerForm">
                 <div class="form-group">
                     <label class="form-label">Nome completo</label>
                     <input type="text" class="form-input" id="registerName" placeholder="Seu nome" required>
@@ -212,7 +200,9 @@
                 </div>
                 <button type="submit" class="btn-submit" id="registerBtn">Criar conta</button>
             </form>
-            <p class="auth-hint" id="authHint">Credenciais fornecidas pelo administrador</p>
+
+            <p class="auth-hint">Seu cadastro será analisado antes da liberação do acesso.</p>
+            <a class="auth-back" href="driver-index.html">Já tem conta? Entrar</a>
         </div>
     </div>
 
@@ -220,43 +210,30 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js"></script>
-<script src="modules/fcm.js"></script>
-    <script>window.PEDRAD_DRIVER_APP_VERSION = '1.0.0';</script>
+    <script src="modules/fcm.js"></script>
     <script src="modules/driver-auth.js"></script>
-    <script src="modules/update-guard.js"></script>
     <script src="modules/cache.js"></script>
     <script src="modules/firebase-init.js"></script>
     <script>
-        function getInitialAuthTab() {
-            const params = new URLSearchParams(window.location.search);
-            return (params.get('tab') || '').toLowerCase() === 'register' ? 'register' : 'login';
-        }
+        (function(){
+            var t = localStorage.getItem('pedrad-theme') || 'dark';
+            document.documentElement.setAttribute('data-theme', t);
+            var m = document.querySelector('meta[name="theme-color"]');
+            if (m) m.setAttribute('content', t === 'light' ? '#f5f5f7' : '#0a0a0c');
+        })();
 
-        (async () => {
-            if (getInitialAuthTab() !== 'register') {
-                const updateOk = await AppUpdateGuard.checkAndBlockIfNeeded();
-                if (!updateOk) return;
-            }
-
-            const auth = firebase.auth();
-            const currentUser = auth.currentUser || await new Promise((resolve) => {
-                const unsub = auth.onAuthStateChanged((user) => {
-                    unsub();
-                    resolve(user || null);
-                });
-            });
-            if (currentUser) {
-                const driver = await DriverAuth.validateSession(currentUser);
-                if (driver) {
-                    DriverAuth.persistSession(driver);
-                    window.location.href = 'home.html';
-                    return;
-                }
-            }
-
-            if (Cache.getDriverId()) {
-                window.location.href = 'home.html';
-                return;
+        (function spawnParticles(){
+            const wrap = document.getElementById('particles');
+            if (!wrap || wrap.childElementCount) return;
+            for (let i = 0; i < 16; i++) {
+                const s = document.createElement('span');
+                const sz = 2 + Math.random() * 2.5;
+                s.style.width = s.style.height = sz + 'px';
+                s.style.left = Math.random() * 100 + '%';
+                const dur = 9 + Math.random() * 10;
+                s.style.animationDuration = dur + 's';
+                s.style.animationDelay = (-Math.random() * dur) + 's';
+                wrap.appendChild(s);
             }
         })();
 
@@ -303,59 +280,9 @@
                 : 'Força da senha: fraca';
         }
 
-        function switchAuthTab(tab) {
-            const isLogin = tab === 'login';
-            document.getElementById('loginForm').style.display = isLogin ? 'block' : 'none';
-            document.getElementById('registerForm').style.display = isLogin ? 'none' : 'block';
-            document.getElementById('tabLogin').classList.toggle('active', isLogin);
-            document.getElementById('tabRegister').classList.toggle('active', !isLogin);
-            document.getElementById('authHint').textContent = isLogin
-                ? 'Credenciais fornecidas pelo administrador'
-                : 'Seu cadastro ficará pendente até aprovação do administrador';
-        }
-
-        // Ambient particles
-        (function spawnParticles(){
-            const wrap = document.getElementById('particles');
-            if (!wrap || wrap.childElementCount) return;
-            for (let i = 0; i < 16; i++) {
-                const s = document.createElement('span');
-                const sz = 2 + Math.random() * 2.5;
-                s.style.width = s.style.height = sz + 'px';
-                s.style.left = Math.random() * 100 + '%';
-                const dur = 9 + Math.random() * 10;
-                s.style.animationDuration = dur + 's';
-                s.style.animationDelay = (-Math.random() * dur) + 's';
-                wrap.appendChild(s);
-            }
-        })();
-
         function getSelectedValues(selectId) {
             return Array.from(document.getElementById(selectId)?.selectedOptions || []).map(option => option.value);
         }
-
-        document.getElementById('loginForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const btn = document.getElementById('loginBtn');
-            btn.disabled = true;
-            btn.textContent = 'Entrando...';
-
-            const email = document.getElementById('loginEmail').value.trim().toLowerCase();
-            const password = document.getElementById('loginPassword').value;
-
-            try {
-                const ok = await DriverAuth.login(email, password);
-                if (ok) {
-                    window.location.href = 'home.html';
-                }
-            } catch (err) {
-                console.error('Login error:', err);
-                showToast('Erro ao entrar');
-            } finally {
-                btn.disabled = false;
-                btn.textContent = 'Entrar';
-            }
-        });
 
         document.getElementById('registerForm').addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -380,15 +307,13 @@
                 });
                 if (ok) {
                     e.target.reset();
-                    switchAuthTab('login');
+                    updatePasswordStrength();
                 }
             } finally {
                 btn.disabled = false;
                 btn.textContent = 'Criar conta';
             }
         });
-
-        switchAuthTab(getInitialAuthTab());
     </script>
 </body>
 </html>

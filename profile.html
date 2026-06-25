@@ -341,6 +341,66 @@
         background:color-mix(in srgb,var(--bg,#0a0a0c) 80%,transparent)!important;
         box-shadow:0 4px 20px rgba(0,0,0,.2);
     }
+
+    /* Ranking oculto: aberto somente por gesto da direita para a esquerda. */
+    .ranking-panel{
+        position:fixed;inset:0;z-index:700;
+        background:var(--bg,#09090b);color:var(--text);
+        transform:translateX(100%);
+        transition:transform .32s cubic-bezier(.22,.8,.24,1);
+        overflow-y:auto;overscroll-behavior:contain;
+        padding-bottom:calc(28px + env(safe-area-inset-bottom));
+        visibility:hidden;
+    }
+    .ranking-panel.open{transform:translateX(0);visibility:visible}
+    body.ranking-open{overflow:hidden}
+    .ranking-header{
+        position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:14px;
+        min-height:64px;padding:12px 16px;
+        background:color-mix(in srgb,var(--bg,#09090b) 88%,transparent);
+        border-bottom:1px solid var(--border);backdrop-filter:blur(18px);
+    }
+    .ranking-close{
+        width:40px;height:40px;border-radius:12px;border:1px solid var(--border);
+        background:var(--bg-input);color:var(--text);font-size:1.3rem;cursor:pointer;
+    }
+    .ranking-heading{min-width:0}
+    .ranking-title{font-size:1rem;font-weight:750}
+    .ranking-subtitle{font-size:.7rem;color:var(--text-muted);margin-top:2px}
+    .ranking-content{max-width:680px;margin:0 auto;padding:18px 14px}
+    .ranking-self{
+        display:none;grid-template-columns:auto 1fr auto;align-items:center;gap:12px;
+        padding:16px;margin-bottom:16px;border-radius:16px;
+        border:1px solid rgba(var(--accent-rgb),.34);
+        background:linear-gradient(135deg,rgba(var(--accent-rgb),.13),var(--bg-card));
+    }
+    .ranking-self.visible{display:grid}
+    .ranking-self-position{font-size:1.45rem;font-weight:800;color:var(--accent)}
+    .ranking-self-label{font-size:.68rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px}
+    .ranking-self-name{font-size:.9rem;font-weight:700;margin-top:2px}
+    .ranking-self-points{font-size:1rem;font-weight:800;text-align:right}
+    .ranking-list{display:flex;flex-direction:column;gap:9px}
+    .ranking-row{
+        display:grid;grid-template-columns:34px 44px minmax(0,1fr) auto;align-items:center;gap:11px;
+        padding:12px;border-radius:14px;background:var(--bg-card);
+        border:1px solid var(--border);
+    }
+    .ranking-row.me{border-color:rgba(var(--accent-rgb),.42);box-shadow:0 0 18px rgba(var(--accent-rgb),.09)}
+    .ranking-position{font-size:.86rem;font-weight:800;text-align:center;color:var(--text-muted)}
+    .ranking-row:nth-child(1) .ranking-position,
+    .ranking-row:nth-child(2) .ranking-position,
+    .ranking-row:nth-child(3) .ranking-position{color:var(--accent)}
+    .ranking-avatar{
+        width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+        overflow:hidden;background:var(--bg-input);border:1px solid var(--border);font-weight:800;
+        background-size:cover;background-position:center;
+    }
+    .ranking-name{font-size:.87rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .ranking-meta{font-size:.68rem;color:var(--text-muted);margin-top:4px}
+    .ranking-points{text-align:right;font-size:.95rem;font-weight:800}
+    .ranking-points small{display:block;font-size:.58rem;color:var(--text-muted);font-weight:500;margin-top:3px}
+    .ranking-state{text-align:center;padding:56px 20px;color:var(--text-muted);font-size:.82rem}
+    @media(prefers-reduced-motion:reduce){.ranking-panel{transition:none}}
     </style>
 </head>
 <body>
@@ -478,15 +538,33 @@
         </div>
     </div>
 
+    <aside class="ranking-panel" id="rankingPanel" aria-hidden="true">
+        <div class="ranking-header">
+            <button type="button" class="ranking-close" onclick="closeRanking()" aria-label="Fechar ranking">×</button>
+            <div class="ranking-heading">
+                <div class="ranking-title">Ranking de entregadores</div>
+                <div class="ranking-subtitle">Pontuação gerada pelas avaliações de entrega</div>
+            </div>
+        </div>
+        <div class="ranking-content">
+            <div class="ranking-self" id="rankingSelf"></div>
+            <div class="ranking-list" id="rankingList">
+                <div class="ranking-state">Carregando ranking...</div>
+            </div>
+        </div>
+    </aside>
+
     <nav class="nav" id="bottomNav"></nav>
 
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js"></script>
     <script src="modules/cache.js"></script>
     <script src="modules/firebase-init.js"></script>
     <script src="modules/shared.js"></script>
     <script src="modules/fcm.js"></script>
+    <script src="modules/driver-auth.js"></script>
     <script>
     // ── Theme ──
     function getTheme(){return localStorage.getItem('pedrad-theme')||'dark'}
@@ -517,6 +595,7 @@
         await ensureDriverToken();
         updateProfileUI();
         await loadLinkedStore();
+        setupHiddenRankingGesture();
 
         setupDriverListener((newData) => {
             Object.assign(driverData, newData);
@@ -561,8 +640,9 @@
         document.getElementById('emailStatusValue').textContent = driverData.email || '-';
 
         const avatar = document.getElementById('profileAvatar');
-        if (driverData.photoUrl) {
-            avatar.style.backgroundImage = `url(${driverData.photoUrl})`;
+        const photoUrl = safeImageUrl(driverData.photoUrl);
+        if (photoUrl) {
+            avatar.style.backgroundImage = `url("${photoUrl}")`;
             avatar.style.backgroundSize = 'cover';
             avatar.style.backgroundPosition = 'center';
             avatar.textContent = '';
@@ -574,6 +654,148 @@
         syncEditProfileForm(false);
     }
 
+    // ==================== HIDDEN RANKING ====================
+    let rankingLoaded = false;
+    let rankingLoading = false;
+
+    function escapeRankingText(value) {
+        return String(value || '').replace(/[&<>"']/g, char => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        })[char]);
+    }
+
+    function safeRankingPhoto(value) {
+        const url = String(value || '').trim();
+        return /^(https?:|data:image\/)/i.test(url)
+            ? url.replace(/["'()\\]/g, '')
+            : '';
+    }
+
+    async function openRanking() {
+        const panel = document.getElementById('rankingPanel');
+        panel.classList.add('open');
+        panel.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('ranking-open');
+        if (!rankingLoaded) await loadRanking();
+    }
+
+    function closeRanking() {
+        const panel = document.getElementById('rankingPanel');
+        panel.classList.remove('open');
+        panel.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('ranking-open');
+    }
+
+    async function loadRanking() {
+        if (rankingLoading) return;
+        rankingLoading = true;
+        const list = document.getElementById('rankingList');
+        list.innerHTML = '<div class="ranking-state">Carregando ranking...</div>';
+        try {
+            const snapshot = await db.collection('driver_rankings').limit(100).get();
+            const entries = snapshot.docs
+                .map(doc => ({ id: doc.id, ...doc.data() }))
+                .filter(entry => entry.active === true);
+            entries.sort((a, b) =>
+                Number(b.rankingPoints || 0) - Number(a.rankingPoints || 0) ||
+                Number(b.ratingAverage || 0) - Number(a.ratingAverage || 0) ||
+                Number(b.ratingCount || 0) - Number(a.ratingCount || 0) ||
+                String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR')
+            );
+            entries.splice(50);
+            renderRanking(entries);
+            rankingLoaded = true;
+        } catch (error) {
+            console.error('Ranking load error:', error);
+            list.innerHTML = '<div class="ranking-state">Não foi possível carregar o ranking.</div>';
+        } finally {
+            rankingLoading = false;
+        }
+    }
+
+    function renderRanking(entries) {
+        const list = document.getElementById('rankingList');
+        const self = document.getElementById('rankingSelf');
+        const ownIndex = entries.findIndex(entry => entry.id === driverData?.id);
+        if (ownIndex >= 0) {
+            const own = entries[ownIndex];
+            self.classList.add('visible');
+            self.innerHTML = `
+                <div class="ranking-self-position">#${ownIndex + 1}</div>
+                <div>
+                    <div class="ranking-self-label">Sua posição</div>
+                    <div class="ranking-self-name">${escapeRankingText(own.name)}</div>
+                </div>
+                <div class="ranking-self-points">${Number(own.rankingPoints || 0)} pts</div>`;
+        } else {
+            self.classList.remove('visible');
+            self.innerHTML = '';
+        }
+
+        if (!entries.length) {
+            list.innerHTML = '<div class="ranking-state">O ranking ainda não possui avaliações.</div>';
+            return;
+        }
+
+        list.innerHTML = entries.map((entry, index) => {
+            const name = escapeRankingText(entry.name || 'Entregador');
+            const photo = safeRankingPhoto(entry.photoUrl);
+            const avatarStyle = photo ? ` style="background-image:url('${photo}')"` : '';
+            const avatarText = photo ? '' : name.charAt(0).toUpperCase();
+            const average = Number(entry.ratingAverage || 0).toFixed(1);
+            const count = Number(entry.ratingCount || 0);
+            return `
+                <div class="ranking-row ${entry.id === driverData?.id ? 'me' : ''}">
+                    <div class="ranking-position">#${index + 1}</div>
+                    <div class="ranking-avatar"${avatarStyle}>${avatarText}</div>
+                    <div>
+                        <div class="ranking-name">${name}</div>
+                        <div class="ranking-meta">${average} / 5 · ${count} ${count === 1 ? 'avaliação' : 'avaliações'}</div>
+                    </div>
+                    <div class="ranking-points">${Number(entry.rankingPoints || 0)}<small>pontos</small></div>
+                </div>`;
+        }).join('');
+    }
+
+    function setupHiddenRankingGesture() {
+        let startX = 0;
+        let startY = 0;
+        let tracking = false;
+        const panel = document.getElementById('rankingPanel');
+
+        document.addEventListener('touchstart', event => {
+            if (panel.classList.contains('open')) return;
+            const touch = event.touches[0];
+            tracking = touch.clientX >= window.innerWidth * 0.6;
+            startX = touch.clientX;
+            startY = touch.clientY;
+        }, { passive: true });
+
+        document.addEventListener('touchend', event => {
+            if (!tracking || panel.classList.contains('open')) return;
+            tracking = false;
+            const touch = event.changedTouches[0];
+            const deltaX = touch.clientX - startX;
+            const deltaY = touch.clientY - startY;
+            if (deltaX <= -70 && Math.abs(deltaX) > Math.abs(deltaY) * 1.35) {
+                openRanking();
+            }
+        }, { passive: true });
+
+        let panelStartX = 0;
+        let panelStartY = 0;
+        panel.addEventListener('touchstart', event => {
+            panelStartX = event.touches[0].clientX;
+            panelStartY = event.touches[0].clientY;
+        }, { passive: true });
+        panel.addEventListener('touchend', event => {
+            const touch = event.changedTouches[0];
+            const deltaX = touch.clientX - panelStartX;
+            const deltaY = touch.clientY - panelStartY;
+            if (deltaX >= 70 && Math.abs(deltaX) > Math.abs(deltaY) * 1.35) closeRanking();
+        }, { passive: true });
+    }
+
     // ==================== LINKED STORE ====================
     async function loadLinkedStore() {
         const storeId = driverData.linkedStoreId || (driverData.linkedStores || [])[0];
@@ -583,7 +805,7 @@
             return;
         }
         document.getElementById('linkedStoreItem').style.display = 'flex';
-        document.getElementById('unlinkStoreBtn').style.display = 'flex';
+        document.getElementById('unlinkStoreBtn').style.display = 'none';
         try {
             const store = await getStoreData(storeId);
             document.getElementById('linkedStoreName').textContent =
@@ -611,42 +833,7 @@
     }
 
     async function unlinkFromStore() {
-        const storeId = driverData.linkedStoreId || (driverData.linkedStores || [])[0];
-        if (!storeId) return;
-        showConfirmModal(
-            'Desvincular da loja?',
-            'Você deixará de receber pedidos desta loja e voltará a receber pedidos do app.',
-            async () => {
-                try {
-                    const current = Array.isArray(driverData.linkedStores) ? driverData.linkedStores : [];
-                    const newStores = current.filter(s => s !== storeId);
-                    const update = {
-                        linkedStores: newStores,
-                        linkedStoreId: newStores[0] || null,
-                        storeId: newStores[0] || null
-                    };
-                    if (newStores.length === 0) {
-                        update.driverType  = 'app';
-                        update.appEligible = true;
-                    }
-
-                    await db.collection('drivers').doc(driverData.id).update(update);
-                    Object.assign(driverData, update);
-                    Cache.setDriver(driverData);
-
-                    if (newStores.length === 0) {
-                        document.getElementById('linkedStoreItem').style.display = 'none';
-                        document.getElementById('unlinkStoreBtn').style.display = 'none';
-                    } else {
-                        await loadLinkedStore();
-                    }
-                    showToast('Desvinculado da loja');
-                } catch(e) {
-                    console.error(e);
-                    showToast('Erro ao desvincular');
-                }
-            }
-        );
+        showToast('Desvinculação de loja deve ser feita pelo administrador');
     }
 
     // ==================== SECTIONS ====================
@@ -711,19 +898,18 @@
         const password = document.getElementById('emailConfirmPassword').value;
         if (!newEmail) { showToast('Digite o novo e-mail'); return; }
         if (!password) { showToast('Digite sua senha'); return; }
-        if (password !== driverData.password) { showToast('Senha incorreta'); return; }
         try {
-            await db.collection('drivers').doc(driverData.id).update({
-                email: newEmail,
-                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            });
+            const ok = await DriverAuth.changeEmail(newEmail, password);
+            if (!ok) return;
+
             driverData.email = newEmail;
+            driverData.emailVerified = false;
             Cache.setDriver(driverData);
             updateProfileUI();
             toggleSection('changeEmailSection');
             document.getElementById('newEmailInput').value = '';
             document.getElementById('emailConfirmPassword').value = '';
-            showToast('E-mail alterado');
+            showToast('Confirme o novo e-mail para concluir a alteração');
         } catch (e) { showToast('Erro ao alterar e-mail'); }
     }
 
@@ -797,8 +983,7 @@
                     lastOnlineAt: firebase.firestore.FieldValue.serverTimestamp()
                 });
             } catch (e) {}
-            Cache.clearAll();
-            window.location.href = 'index.html';
+            logoutDriverSession();
         });
     }
     </script>

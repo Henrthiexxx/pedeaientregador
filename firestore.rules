@@ -1,0 +1,269 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    function authEmail() {
+      return isAuth() && request.auth.token.email is string
+        ? request.auth.token.email.lower()
+        : '';
+    }
+
+    function currentDriverDoc() {
+      return get(/databases/$(database)/documents/drivers/$(request.auth.uid));
+    }
+
+    function hasCurrentDriverDoc() {
+      return isAuth() && exists(/databases/$(database)/documents/drivers/$(request.auth.uid));
+    }
+
+    function currentDriverData() {
+      return currentDriverDoc().data;
+    }
+
+    function currentDriverLinkedStoreIds() {
+      return currentDriverData().linkedStores is list
+        ? currentDriverData().linkedStores
+        : [];
+    }
+
+    function isCurrentDriverActive() {
+      return hasCurrentDriverDoc() &&
+        currentDriverData().authUid == request.auth.uid &&
+        currentDriverData().status in ['approved', 'active'];
+    }
+
+    function isCurrentDriverStoreBound() {
+      return isCurrentDriverActive() && (
+        (currentDriverData().linkedStoreId is string && currentDriverData().linkedStoreId != '') ||
+        (currentDriverData().storeId is string && currentDriverData().storeId != '') ||
+        currentDriverLinkedStoreIds().size() > 0
+      );
+    }
+
+    function currentDriverCanSeeStore(storeId) {
+      return isCurrentDriverStoreBound() && (
+        (currentDriverData().linkedStoreId is string && currentDriverData().linkedStoreId == storeId) ||
+        (currentDriverData().storeId is string && currentDriverData().storeId == storeId) ||
+        storeId in currentDriverLinkedStoreIds()
+      );
+    }
+
+    function isDriverDocOwner(driverId) {
+      return isAuth() &&
+        exists(/databases/$(database)/documents/drivers/$(driverId)) &&
+        get(/databases/$(database)/documents/drivers/$(driverId)).data.authUid == request.auth.uid;
+    }
+
+    function isStoreOwner(storeId) {
+      let store = get(/databases/$(database)/documents/stores/$(storeId)).data;
+      return isAuth() && (
+        (store.ownerId is string && store.ownerId == request.auth.uid) ||
+        (store.ownerEmail is string && store.ownerEmail.lower() == authEmail())
+      );
+    }
+
+    function isAssignedOrderDriver(data) {
+      return data.driverId is string && isDriverDocOwner(data.driverId);
+    }
+
+    function isOrderUser(data) {
+      return isAuth() && data.userId is string && data.userId == request.auth.uid;
+    }
+
+    function isAvailableDriverOrder(data) {
+      return isCurrentDriverActive() &&
+        data.driverId == null &&
+        data.orderType == 'delivery' &&
+        data.status in ['preparing', 'ready'] &&
+        (
+          (data.deliveryPool == 'app' && !isCurrentDriverStoreBound()) ||
+          (data.deliveryPool == 'store' && data.storeId is string && currentDriverCanSeeStore(data.storeId))
+        );
+    }
+
+    function changedOnly(allowedKeys) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowedKeys);
+    }
+
+    function immutableOrderFieldsPreserved() {
+      return request.resource.data.storeId == resource.data.storeId &&
+        request.resource.data.userId == resource.data.userId &&
+        request.resource.data.items == resource.data.items &&
+        request.resource.data.total == resource.data.total &&
+        request.resource.data.subtotal == resource.data.subtotal &&
+        request.resource.data.deliveryFee == resource.data.deliveryFee &&
+        request.resource.data.paymentMethod == resource.data.paymentMethod &&
+        request.resource.data.orderType == resource.data.orderType &&
+        request.resource.data.deliveryPool == resource.data.deliveryPool &&
+        request.resource.data.address == resource.data.address;
+    }
+
+    function validDriverAcceptance() {
+      return isCurrentDriverActive() &&
+        resource.data.driverId == null &&
+        request.resource.data.driverId == request.auth.uid &&
+        request.resource.data.status == resource.data.status &&
+        immutableOrderFieldsPreserved() &&
+        changedOnly([
+          'driverId',
+          'driverName',
+          'driverPhone',
+          'driverVehicle',
+          'driver',
+          'driverEarning',
+          'timeline',
+          'acceptedAt'
+        ]);
+    }
+
+    function validAssignedDriverUpdate() {
+      return isAssignedOrderDriver(resource.data) &&
+        request.resource.data.driverId == resource.data.driverId &&
+        immutableOrderFieldsPreserved() &&
+        changedOnly([
+          'status',
+          'timeline',
+          'pickedUpAt',
+          'deliveredAt',
+          'driverLocation',
+          'deliveryLocation',
+          'driver'
+        ]);
+    }
+
+    function driverFieldsOnlySelfCanWrite() {
+      return changedOnly([
+          'phone',
+          'vehicle',
+          'plate',
+          'pix',
+          'instagramHandle',
+          'availableDays',
+          'availableHours',
+          'email',
+          'emailVerified',
+          'emailChangedAt',
+          'passwordChangedAt',
+          'photoUrl',
+          'updatedAt',
+          'online',
+          'lastOnlineAt',
+          'idleState',
+          'idleLastEvent',
+          'idleUpdatedAt',
+          'cooldownUntil',
+          'driverToken',
+          'tokenCreatedAt',
+          'fcmTokens',
+          'lastTokenUpdate'
+        ]) &&
+        request.resource.data.authUid == resource.data.authUid &&
+        request.resource.data.status == resource.data.status &&
+        request.resource.data.sessionRevokedAt == resource.data.sessionRevokedAt &&
+        request.resource.data.tempPassword == resource.data.tempPassword &&
+        request.resource.data.passwordOverride == resource.data.passwordOverride;
+    }
+
+    match /stores/{storeId} {
+      allow read: if isAuth();
+      allow create: if false;
+      allow update: if isStoreOwner(storeId);
+      allow delete: if false;
+    }
+
+    match /products/{productId} {
+      allow read: if true;
+      allow create: if isAuth() &&
+        request.resource.data.storeId is string &&
+        isStoreOwner(request.resource.data.storeId);
+      allow update, delete: if isAuth() &&
+        resource.data.storeId is string &&
+        isStoreOwner(resource.data.storeId);
+    }
+
+    match /orders/{orderId} {
+      allow read: if isAuth() && (
+        isStoreOwner(resource.data.storeId) ||
+        isOrderUser(resource.data) ||
+        isAssignedOrderDriver(resource.data) ||
+        isAvailableDriverOrder(resource.data)
+      );
+
+      allow create: if false;
+
+      allow update: if isAuth() && (
+        isStoreOwner(resource.data.storeId) ||
+        validDriverAcceptance() ||
+        validAssignedDriverUpdate()
+      );
+
+      allow delete: if false;
+    }
+
+    match /drivers/{driverId} {
+      allow read: if isAuth() && isDriverDocOwner(driverId);
+
+      allow create: if isAuth() &&
+        request.auth.uid == driverId &&
+        request.resource.data.authUid == request.auth.uid &&
+        request.resource.data.status == 'pending';
+
+      allow update: if isAuth() && (
+        isDriverDocOwner(driverId) &&
+        driverFieldsOnlySelfCanWrite()
+      );
+
+      allow delete: if false;
+    }
+
+    match /driver_rankings/{driverId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /users/{userId} {
+      allow read, write: if isAuth() && request.auth.uid == userId;
+    }
+
+    match /dispatchOffers/{offerId} {
+      allow read: if isAuth() && resource.data.driverId == request.auth.uid;
+      allow update: if isAuth() &&
+        resource.data.driverId == request.auth.uid &&
+        changedOnly(['status', 'declinedAt', 'acceptedAt', 'updatedAt']) &&
+        request.resource.data.status == 'declined';
+      allow create, delete: if false;
+    }
+
+    match /config/{docId} {
+      allow read: if isAuth();
+      allow write: if false;
+    }
+
+    match /deliveryFees/{feeId} {
+      allow read: if isAuth();
+      allow write: if false;
+    }
+
+    match /billing_summaries/{docId} {
+      allow read: if false;
+      allow create: if isAuth() && request.resource.data.driverId == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    match /idleAuditLog/{docId} {
+      allow read: if false;
+      allow create: if isCurrentDriverActive() &&
+        request.resource.data.driverId == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    match /ads_orders/{docId} {
+      allow read, create, update: if false;
+      allow delete: if false;
+    }
+  }
+}

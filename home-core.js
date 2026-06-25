@@ -372,12 +372,6 @@ async function confirmDelivery() {
         const updateData = { status: 'delivered', timeline, deliveredAt: new Date().toISOString(), driverLocation: null };
         if (capturedLocation) updateData.deliveryLocation = capturedLocation;
         await db.collection('orders').doc(deliveryRef.id).update(updateData);
-        if (driverData) {
-            await db.collection('drivers').doc(driverData.id).update({
-                totalDeliveries: firebase.firestore.FieldValue.increment(1),
-                lastDeliveryAt:  firebase.firestore.FieldValue.serverTimestamp()
-            });
-        }
         if (IdleDriver.isStoreDriver()) {
             IdleDriver.transition(deliveryRef.storeId === getLinkedStoreIds(driverData)[0] ? 'STORE_DELIVERY_DONE' : 'APP_TRIP_ENDED');
         }

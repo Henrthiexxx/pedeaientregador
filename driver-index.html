@@ -112,6 +112,11 @@
     <script src="modules/cache.js"></script>
     <script src="modules/firebase-init.js"></script>
     <script>
+        function getInitialAuthTab() {
+            const params = new URLSearchParams(window.location.search);
+            return (params.get('tab') || '').toLowerCase() === 'register' ? 'register' : 'login';
+        }
+
         // Theme
         (function(){
             var t=localStorage.getItem('pedrad-theme')||'dark';
@@ -121,12 +126,28 @@
         })();
 
         (async () => {
-            const updateOk = await AppUpdateGuard.checkAndBlockIfNeeded();
-            if (!updateOk) return;
+            if (getInitialAuthTab() !== 'register') {
+                const updateOk = await AppUpdateGuard.checkAndBlockIfNeeded();
+                if (!updateOk) return;
+            }
 
-            // If already logged in, go to home
-            const savedId = localStorage.getItem('pedrad_driver_id');
-            if (savedId) {
+            const auth = firebase.auth();
+            const currentUser = auth.currentUser || await new Promise((resolve) => {
+                const unsub = auth.onAuthStateChanged((user) => {
+                    unsub();
+                    resolve(user || null);
+                });
+            });
+            if (currentUser) {
+                const driver = await DriverAuth.validateSession(currentUser);
+                if (driver) {
+                    DriverAuth.persistSession(driver);
+                    window.location.href = 'home.html';
+                    return;
+                }
+            }
+
+            if (Cache.getDriverId()) {
                 window.location.href = 'home.html';
                 return;
             }
@@ -205,44 +226,14 @@
             const password = document.getElementById('loginPassword').value;
 
             try {
-                const snapshot = await db.collection('drivers')
-                    .where('email', '==', email)
-                    .limit(1)
-                    .get();
-
-                if (snapshot.empty) {
-                    showToast('Entregador não cadastrado');
-                    btn.disabled = false;
-                    btn.textContent = 'Entrar';
-                    return;
+                const ok = await DriverAuth.login(email, password);
+                if (ok) {
+                    window.location.href = 'home.html';
                 }
-
-                const driver = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
-
-                if (driver.status === 'blocked') {
-                    showToast('Sua conta está bloqueada');
-                    btn.disabled = false;
-                    btn.textContent = 'Entrar';
-                    return;
-                }
-
-                if (driver.password !== password) {
-                    showToast('Senha incorreta');
-                    btn.disabled = false;
-                    btn.textContent = 'Entrar';
-                    return;
-                }
-
-                // Save session
-                Cache.setDriverId(driver.id);
-                Cache.setDriver(driver);
-                Cache.setOnline(false);
-
-                window.location.href = 'home.html';
-
             } catch (err) {
                 console.error('Login error:', err);
                 showToast('Erro ao entrar');
+            } finally {
                 btn.disabled = false;
                 btn.textContent = 'Entrar';
             }
@@ -278,247 +269,8 @@
                 btn.textContent = 'Criar conta';
             }
         });
+
+        switchAuthTab(getInitialAuthTab());
     </script>
-    <!-- ============================================================
-     SNIPPET: Adicionar ao profile.html do entregador
-     ============================================================
-     
-     1. Adicione o script ANTES dos outros scripts:
-        <script src="modules/driver-auth.js"></script>
-     
-     2. Adicione os blocos HTML abaixo NO INÍCIO da .page (antes do profile-header)
-     
-     3. Adicione a seção "Segurança" APÓS a seção "Conta"
-     
-     4. Adicione o código JS ao bloco <script> existente
-     ============================================================ -->
-
-
-<!-- ====== BLOCO 1: Banner de verificação de email (inserir ANTES do profile-header) ====== -->
-
-<div id="emailBanner" class="email-banner" style="display:none;">
-    <div class="email-banner-icon">📧</div>
-    <div class="email-banner-content">
-        <div class="email-banner-title" id="emailBannerTitle">Confirme seu e-mail</div>
-        <div class="email-banner-text" id="emailBannerText">
-            Verifique sua caixa de entrada para confirmar seu e-mail.
-        </div>
-    </div>
-    <div class="email-banner-actions">
-        <button class="email-banner-btn" onclick="handleResendVerification()">Reenviar</button>
-        <button class="email-banner-btn secondary" onclick="handleCheckVerification()">Já confirmei</button>
-    </div>
-</div>
-
-<!-- Banner de senha temporária -->
-<div id="tempPasswordBanner" class="email-banner danger" style="display:none;">
-    <div class="email-banner-icon">⚠️</div>
-    <div class="email-banner-content">
-        <div class="email-banner-title">Senha Temporária Ativa</div>
-        <div class="email-banner-text">
-            Sua senha foi redefinida pelo administrador. Altere para uma senha pessoal o mais rápido possível.
-        </div>
-    </div>
-    <div class="email-banner-actions">
-        <button class="email-banner-btn" onclick="scrollToSecurity()">Alterar Agora</button>
-    </div>
-</div>
-
-
-
-
-    <div id="changePasswordSection" class="collapsible-section" style="display:none;">
-        <div class="section-form">
-            <div class="form-group">
-                <label class="form-label-sm">Senha atual</label>
-                <input type="password" class="form-input-sm" id="currentPasswordInput" placeholder="Senha atual">
-            </div>
-            <div class="form-group">
-                <label class="form-label-sm">Nova senha</label>
-                <input type="password" class="form-input-sm" id="newPasswordInput" placeholder="Mínimo 6 caracteres">
-            </div>
-            <div class="form-group">
-                <label class="form-label-sm">Confirmar nova senha</label>
-                <input type="password" class="form-input-sm" id="confirmPasswordInput" placeholder="Repita a nova senha">
-            </div>        </div>
-    </div>
-</div>
-
-
-<!-- Email banners, collapsible sections, badges e btn-action: ver index.css -->
-
-
-<!-- ====== BLOCO 4: JavaScript (adicionar ao <script> existente) ====== -->
-
-<script>
-    // ===== Call these on page load (add to DOMContentLoaded) =====
-    // After checkAuth() and updateProfileUI():
-    //   updateSecurityUI();
-    //   checkBanners();
-
-    function updateSecurityUI() {
-        if (!driverData) return;
-        
-        const emailStatus = document.getElementById('emailStatusValue');
-        const user = auth?.currentUser || firebase.auth().currentUser;
-        const verified = driverData.emailVerified || (user && user.emailVerified);
-        
-        emailStatus.innerHTML = verified
-            ? `<span class="email-verified-badge">✅ Verificado</span>`
-            : `<span class="email-unverified-badge">❌ Não verificado</span>`;
-    }
-
-    function checkBanners() {
-        if (!driverData) return;
-        
-        const user = auth?.currentUser || firebase.auth().currentUser;
-        const verified = driverData.emailVerified || (user && user.emailVerified);
-        
-        // Email verification banner
-        if (!verified) {
-            document.getElementById('emailBanner').style.display = 'flex';
-        } else {
-            document.getElementById('emailBanner').style.display = 'none';
-        }
-        
-        // Temp password banner
-        if (driverData.passwordOverride) {
-            document.getElementById('tempPasswordBanner').style.display = 'flex';
-        }
-    }
-
-    // ===== Handlers =====
-    async function handleResendVerification() {
-        if (typeof DriverAuth !== 'undefined') {
-            await DriverAuth.resendVerification();
-        } else {
-            const user = firebase.auth().currentUser;
-            if (user) {
-                try {
-                    await user.sendEmailVerification();
-                    showToast('📧 Email de verificação reenviado!');
-                } catch(e) {
-                    showToast('Aguarde antes de reenviar');
-                }
-            }
-        }
-    }
-
-    async function handleCheckVerification() {
-        const user = firebase.auth().currentUser;
-        if (!user) { showToast('Faça login novamente'); return; }
-        
-        await user.reload();
-        if (user.emailVerified) {
-            await db.collection('drivers').doc(driverData.id).update({ emailVerified: true });
-            driverData.emailVerified = true;
-            document.getElementById('emailBanner').style.display = 'none';
-            updateSecurityUI();
-            showToast('✅ Email verificado com sucesso!');
-        } else {
-            showToast('Email ainda não verificado. Verifique sua caixa de entrada.');
-        }
-    }
-
-    async function handleChangePassword() {
-        const current = document.getElementById('currentPasswordInput').value;
-        const newPass = document.getElementById('newPasswordInput').value;
-        const confirm = document.getElementById('confirmPasswordInput').value;
-
-        if (!current) { showToast('Informe a senha atual'); return; }
-        if (!newPass || newPass.length < 6) { showToast('Nova senha: mínimo 6 caracteres'); return; }
-        if (newPass !== confirm) { showToast('Senhas não conferem'); return; }
-
-        let success = false;
-        if (typeof DriverAuth !== 'undefined') {
-            success = await DriverAuth.changePassword(current, newPass);
-        } else {
-            // Fallback without module
-            const user = firebase.auth().currentUser;
-            if (!user) { showToast('Faça login novamente'); return; }
-            try {
-                const credential = firebase.auth.EmailAuthProvider.credential(user.email, current);
-                await user.reauthenticateWithCredential(credential);
-                await user.updatePassword(newPass);
-                if (driverData?.id) {
-                    await db.collection('drivers').doc(driverData.id).update({
-                        passwordOverride: false,
-                        tempPassword: firebase.firestore.FieldValue.delete(),
-                        passwordChangedAt: firebase.firestore.FieldValue.serverTimestamp()
-                    });
-                }
-                success = true;
-                showToast('✅ Senha alterada!');
-            } catch(e) {
-                showToast(e.code === 'auth/wrong-password' ? 'Senha atual incorreta' : 'Erro: ' + e.message);
-            }
-        }
-
-        if (success) {
-            document.getElementById('currentPasswordInput').value = '';
-            document.getElementById('newPasswordInput').value = '';
-            document.getElementById('confirmPasswordInput').value = '';
-            document.getElementById('changePasswordSection').style.display = 'none';
-            // Hide temp password banner
-            document.getElementById('tempPasswordBanner').style.display = 'none';
-            if (driverData) driverData.passwordOverride = false;
-        }
-    }
-
-    async function handleChangeEmail() {
-        const newEmail = document.getElementById('newEmailInput').value.trim();
-        const password = document.getElementById('emailConfirmPassword').value;
-
-        if (!newEmail || !newEmail.includes('@')) { showToast('Email inválido'); return; }
-        if (!password) { showToast('Informe sua senha para confirmar'); return; }
-
-        // Check email verification first
-        const user = firebase.auth().currentUser;
-        if (user && !user.emailVerified) {
-            showToast('Confirme seu email atual antes de alterar');
-            return;
-        }
-
-        let success = false;
-        if (typeof DriverAuth !== 'undefined') {
-            success = await DriverAuth.changeEmail(newEmail, password);
-        } else {
-            try {
-                const credential = firebase.auth.EmailAuthProvider.credential(user.email, password);
-                await user.reauthenticateWithCredential(credential);
-                await user.verifyBeforeUpdateEmail(newEmail);
-                if (driverData?.id) {
-                    await db.collection('drivers').doc(driverData.id).update({
-                        email: newEmail.toLowerCase(),
-                        emailVerified: false
-                    });
-                }
-                success = true;
-                showToast('📧 Verificação enviada para ' + newEmail);
-            } catch(e) {
-                showToast(e.code === 'auth/wrong-password' ? 'Senha incorreta' : 'Erro: ' + e.message);
-            }
-        }
-
-        if (success) {
-            document.getElementById('newEmailInput').value = '';
-            document.getElementById('emailConfirmPassword').value = '';
-            document.getElementById('changeEmailSection').style.display = 'none';
-            checkBanners();
-            updateSecurityUI();
-        }
-    }
-
-    function toggleSection(id) {
-        const el = document.getElementById(id);
-        el.style.display = el.style.display === 'none' ? 'block' : 'none';
-    }
-
-    function scrollToSecurity() {
-        document.getElementById('securitySection').scrollIntoView({ behavior: 'smooth' });
-        // Auto-open password change
-        document.getElementById('changePasswordSection').style.display = 'block';
-    }
-</script>
 </body>
 </html>

@@ -92,8 +92,9 @@ function updateDriverCard() {
     document.getElementById('driverVehicle').textContent = `${v} ${driverData.plate ? '• ' + driverData.plate : ''}`;
     document.getElementById('driverRating').textContent = (driverData.rating || 5.0).toFixed(1);
     const avatar = document.getElementById('driverAvatar');
-    if (driverData.photoUrl) {
-        avatar.style.backgroundImage = `url(${driverData.photoUrl})`;
+    const photoUrl = safeImageUrl(driverData.photoUrl);
+    if (photoUrl) {
+        avatar.style.backgroundImage = `url("${photoUrl}")`;
         avatar.style.backgroundSize = 'cover';
         avatar.style.backgroundPosition = 'center';
         avatar.textContent = '';
@@ -159,7 +160,11 @@ function renderAvailableOrders() {
         const fee      = getDeliveryFee(order.address?.neighborhood);
         const earning  = calculateDriverEarning(fee, order.distance);
         const isOwn    = linkedStoreIds.includes(String(order.storeId || ''));
-        const storeAddressText = buildStoreAddressText(order);
+        const storeName = escapeHtml(order.storeName || 'Loja');
+        const storeAddressText = escapeHtml(buildStoreAddressText(order));
+        const neighborhood = escapeHtml(order.address?.neighborhood || '');
+        const street = escapeHtml(order.address?.street || '');
+        const number = escapeHtml(order.address?.number || '');
         const storeAddressHtml = `
             <div class="address-text" id="store-address-${order.id}" style="font-size:.8rem;color:var(--text-muted);margin-top:3px;${storeAddressText ? '' : 'display:none;'}">
                 ${storeAddressText || ''}
@@ -172,13 +177,13 @@ function renderAvailableOrders() {
                 <div class="delivery-store">
                     <div class="delivery-store-icon" id="icon-${order.id}">□</div>
                     <div>
-                        <div class="delivery-store-name">${order.storeName || 'Loja'}${isOwn ? ' ★' : ''}</div>
+                        <div class="delivery-store-name">${storeName}${isOwn ? ' ★' : ''}</div>
                         <div class="delivery-store-time">Aguardando há ${waitTime} min</div>
                     </div>
                 </div>
                 <div class="delivery-value">
                     <div class="delivery-fee">+ ${formatCurrency(earning)}</div>
-                    <div class="delivery-distance">${order.distance ? Number(order.distance).toFixed(1) + ' km' : order.address?.neighborhood || ''}</div>
+                    <div class="delivery-distance">${order.distance ? Number(order.distance).toFixed(1) + ' km' : neighborhood}</div>
                 </div>
             </div>
             <div class="delivery-body">
@@ -186,7 +191,7 @@ function renderAvailableOrders() {
                     <div class="address-icon">□</div>
                     <div class="address-info">
                         <div class="address-label">Retirar em</div>
-                        <div class="address-text">${order.storeName || 'Loja'}</div>
+                        <div class="address-text">${storeName}</div>
                         ${storeAddressHtml}
                     </div>
                 </div>
@@ -194,7 +199,7 @@ function renderAvailableOrders() {
                     <div class="address-icon">◎</div>
                     <div class="address-info">
                         <div class="address-label">Entregar em</div>
-                        <div class="address-text">${order.address?.street || ''}, ${order.address?.number || ''} - ${order.address?.neighborhood || ''}</div>
+                        <div class="address-text">${street}, ${number} - ${neighborhood}</div>
                     </div>
                 </div>
                 <div class="delivery-actions">
@@ -207,10 +212,11 @@ function renderAvailableOrders() {
     filtered.forEach(async order => {
         if (order.storeId) {
             const store = await getStoreData(order.storeId);
-            if (store?.logoUrl) {
+            const logoUrl = safeImageUrl(store?.logoUrl);
+            if (logoUrl) {
                 const el = document.getElementById('icon-' + order.id);
                 if (el) {
-                    el.style.backgroundImage = `url(${store.logoUrl})`;
+                    el.style.backgroundImage = `url("${logoUrl}")`;
                     el.style.backgroundSize = 'cover';
                     el.style.backgroundPosition = 'center';
                     el.textContent = '';
@@ -240,7 +246,11 @@ function renderAcceptedOrders() {
         const earning     = calculateDriverEarning(order.driverEarning || fee, order.distance);
         const statusLabel = order.status === 'preparing' ? 'Preparando' : 'Pronto p/ retirada';
         const canPickup   = order.status === 'ready';
-        const storeAddressText = buildStoreAddressText(order);
+        const storeName = escapeHtml(order.storeName || 'Loja');
+        const storeAddressText = escapeHtml(buildStoreAddressText(order));
+        const neighborhood = escapeHtml(order.address?.neighborhood || '');
+        const street = escapeHtml(order.address?.street || '');
+        const number = escapeHtml(order.address?.number || '');
         const storeAddressHtml = `
             <div class="address-text" id="accepted-store-address-${order.id}" style="font-size:.8rem;color:var(--text-muted);margin-top:3px;${storeAddressText ? '' : 'display:none;'}">
                 ${storeAddressText || ''}
@@ -251,13 +261,13 @@ function renderAcceptedOrders() {
                 <div class="delivery-store">
                     <div class="delivery-store-icon" id="aicon-${order.id}">□</div>
                     <div>
-                        <div class="delivery-store-name">${order.storeName || 'Loja'}</div>
+                        <div class="delivery-store-name">${storeName}</div>
                         <div class="delivery-store-time">${statusLabel}</div>
                     </div>
                 </div>
                 <div class="delivery-value">
                     <div class="delivery-fee">+ ${formatCurrency(earning)}</div>
-                    <div class="delivery-distance">${order.distance ? Number(order.distance).toFixed(1) + ' km' : order.address?.neighborhood || ''}</div>
+                    <div class="delivery-distance">${order.distance ? Number(order.distance).toFixed(1) + ' km' : neighborhood}</div>
                 </div>
             </div>
             <div class="delivery-body">
@@ -265,7 +275,7 @@ function renderAcceptedOrders() {
                     <div class="address-icon">□</div>
                     <div class="address-info">
                         <div class="address-label">Retirar em</div>
-                        <div class="address-text">${order.storeName || 'Loja'}</div>
+                        <div class="address-text">${storeName}</div>
                         ${storeAddressHtml}
                     </div>
                 </div>
@@ -273,7 +283,7 @@ function renderAcceptedOrders() {
                     <div class="address-icon">◎</div>
                     <div class="address-info">
                         <div class="address-label">Entregar em</div>
-                        <div class="address-text">${order.address?.street || ''}, ${order.address?.number || ''} - ${order.address?.neighborhood || ''}</div>
+                        <div class="address-text">${street}, ${number} - ${neighborhood}</div>
                     </div>
                 </div>
                 <div class="delivery-actions">
@@ -289,10 +299,11 @@ function renderAcceptedOrders() {
     acceptedOrders.forEach(async order => {
         if (order.storeId) {
             const store = await getStoreData(order.storeId);
-            if (store?.logoUrl) {
+            const logoUrl = safeImageUrl(store?.logoUrl);
+            if (logoUrl) {
                 const el = document.getElementById('aicon-' + order.id);
                 if (el) {
-                    el.style.backgroundImage = `url(${store.logoUrl})`;
+                    el.style.backgroundImage = `url("${logoUrl}")`;
                     el.style.backgroundSize = 'cover';
                     el.style.backgroundPosition = 'center';
                     el.textContent = '';
@@ -315,10 +326,15 @@ function renderCurrentDelivery() {
     document.getElementById('currentDeliverySection').style.display = 'block';
     const fee        = getDeliveryFee(currentDelivery.address?.neighborhood);
     const earning    = calculateDriverEarning(currentDelivery.driverEarning || fee, currentDelivery.distance);
-    const clientName = currentDelivery.userName || 'Cliente';
-    const clientPhone= currentDelivery.userPhone || '';
-    const clientAddressText = buildClientAddressText(currentDelivery);
-    const storeAddressFallback = buildStoreAddressText(currentDelivery);
+    const clientName = escapeHtml(currentDelivery.userName || 'Cliente');
+    const clientPhone= escapeHtml(currentDelivery.userPhone || '');
+    const clientAddressText = escapeHtml(buildClientAddressText(currentDelivery));
+    const storeName = escapeHtml(currentDelivery.storeName || 'Loja');
+    const storeAddressFallback = escapeHtml(buildStoreAddressText(currentDelivery));
+    const street = escapeHtml(currentDelivery.address?.street || '');
+    const number = escapeHtml(currentDelivery.address?.number || '');
+    const complement = escapeHtml(currentDelivery.address?.complement || '');
+    const reference = escapeHtml(currentDelivery.address?.reference || '');
     document.getElementById('currentDelivery').innerHTML = `
         <div class="current-delivery-header">
             <div class="current-delivery-title">Pedido #${currentDelivery.id.slice(-6).toUpperCase()}</div>
@@ -337,14 +353,14 @@ function renderCurrentDelivery() {
             <div class="route-addresses">
                 <div class="route-address">
                     <div class="route-address-label">Retirar</div>
-                    <div class="route-address-text">${currentDelivery.storeName || 'Loja'}</div>
+                    <div class="route-address-text">${storeName}</div>
                     <div class="route-address-text" id="pickupStoreAddress" style="font-size:.8rem;color:var(--text-muted);margin-top:3px;">
                         ${storeAddressFallback || 'Endereço da loja não informado'}
                     </div>
                 </div>
                 <div class="route-address">
                     <div class="route-address-label">Entregar</div>
-                    <div class="route-address-text">${currentDelivery.address?.street || ''}, ${currentDelivery.address?.number || ''}</div>
+                    <div class="route-address-text">${street}, ${number}</div>
                 </div>
             </div>
         </div>
@@ -352,8 +368,8 @@ function renderCurrentDelivery() {
             <div class="client-label">Cliente</div>
             <div class="client-name">${clientName}</div>
             ${clientPhone ? `<div class="client-phone"><a href="tel:${clientPhone}" style="color:var(--primary);text-decoration:none;">${clientPhone}</a></div>` : ''}
-            ${currentDelivery.address?.complement ? `<div style="font-size:0.8rem;color:var(--text-muted);margin-top:8px;">${currentDelivery.address.complement}</div>` : ''}
-            ${currentDelivery.address?.reference  ? `<div style="font-size:0.8rem;color:var(--text-muted);">Ref: ${currentDelivery.address.reference}</div>` : ''}
+            ${complement ? `<div style="font-size:0.8rem;color:var(--text-muted);margin-top:8px;">${complement}</div>` : ''}
+            ${reference ? `<div style="font-size:0.8rem;color:var(--text-muted);">Ref: ${reference}</div>` : ''}
             <div class="client-copy-actions">
                 <button class="btn btn-secondary btn-sm" onclick="copyClientField('phone')">Copiar telefone</button>
                 <button class="btn btn-secondary btn-sm" onclick="copyClientField('name')">Copiar nome</button>
