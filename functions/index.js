@@ -165,6 +165,9 @@ exports.onOrderUpdate = functions.firestore
         // D) Entregue → notifica cliente
         if (after.status === "delivered" && before.status !== "delivered") {
             promises.push(notifyCustomer(after, orderId, "✅ Pedido Entregue!", "Seu pedido foi entregue. Bom apetite!"));
+            if (after.driverId) {
+                promises.push(updateDriverDeliveryStats(after.driverId));
+            }
         }
 
         await Promise.allSettled(promises);
@@ -418,5 +421,17 @@ async function notifyCustomer(order, orderId, title, body) {
         }
     } catch (err) {
         console.error("notifyCustomer erro:", err);
+    }
+}
+
+async function updateDriverDeliveryStats(driverId) {
+    if (!driverId) return;
+    try {
+        await db.collection("drivers").doc(driverId).update({
+            totalDeliveries: admin.firestore.FieldValue.increment(1),
+            lastDeliveryAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+    } catch (err) {
+        console.error("updateDriverDeliveryStats erro:", err);
     }
 }
