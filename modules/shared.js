@@ -50,63 +50,103 @@ function normalizeDriverData(driver) {
 }
 
 async function syncDriverRoutingMeta(driver) {
-    if (!driver?.id) return;
-
-    const normalized = normalizeDriverData(driver);
-    const patch = {};
-
-    if ((driver.deliveryPool || null) !== normalized.deliveryPool) {
-        patch.deliveryPool = normalized.deliveryPool;
-    }
-
-    if ((driver.primaryStoreId || null) !== (normalized.primaryStoreId || null)) {
-        patch.primaryStoreId = normalized.primaryStoreId || null;
-    }
-
-    if (!sameStringArray(driver.routingStoreIds, normalized.routingStoreIds)) {
-        patch.routingStoreIds = normalized.routingStoreIds;
-    }
-
-    if (Object.keys(patch).length === 0) return;
-
-    try {
-        await db.collection('drivers').doc(driver.id).update(patch);
-    } catch (e) {
-        console.error('Error syncing driver routing meta:', e);
-    }
+    // Routing is derived client-side from linked store fields and should not be
+    // persisted from the browser.
+    return normalizeDriverData(driver);
 }
 
 // ==================== AUTH CHECK ====================
 
-async function checkAuth() {
-    const driverId = Cache.getDriverId();
-    if (!driverId) {
-        window.location.href = 'index.html';
-        return false;
-    }
+let _driverSessionTimer = null;
 
-    const cached = Cache.getDriver();
-    if (cached) {
-        driverData = normalizeDriverData(cached);
+function isDriverSessionRevoked(driver) {
+    return driver?.status === 'blocked' || !!driver?.sessionRevokedAt;
+}
+
+function logoutDriverSession() {
+    Cache.clearAll();
+    try { firebase.auth?.().signOut?.(); } catch (_) {}
+    window.location.href = 'index.html';
+}
+
+function waitForAuthUser() {
+    return new Promise((resolve) => {
+        const auth = firebase.auth?.();
+        if (!auth) {
+            resolve(null);
+            return;
+        }
+        if (auth.currentUser) {
+            resolve(auth.currentUser);
+            return;
+        }
+        const unsub = auth.onAuthStateChanged((user) => {
+            unsub();
+            resolve(user || null);
+        });
+    });
+}
+
+async function loadAuthenticatedDriver() {
+    const auth = firebase.auth?.();
+    const user = auth?.currentUser || await waitForAuthUser();
+    if (!user) return null;
+
+    try {
+        await user.getIdToken(true);
+        const snapshot = await db.collection('drivers')
+            .where('authUid', '==', user.uid)
+            .limit(1)
+            .get();
+
+        if (snapshot.empty) {
+            return null;
+        }
+
+        const doc = snapshot.docs[0];
+        const data = { id: doc.id, ...doc.data() };
+        if (isDriverSessionRevoked(data) || data.status === 'pending') {
+            return null;
+        }
+
+        driverData = normalizeDriverData(data);
         Cache.setDriver(driverData);
+        Cache.setDriverId(driverData.id);
         syncDriverRoutingMeta(driverData).catch(() => {});
+        return driverData;
+    } catch (e) {
+        console.error('Auth check error:', e);
+        return null;
+    }
+}
+
+function startDriverSessionGuard(driverId) {
+    if (_driverSessionTimer) return;
+    _driverSessionTimer = setInterval(async () => {
+        const next = await loadAuthenticatedDriver();
+        if (!next || next.id !== driverId) logoutDriverSession();
+    }, 60000);
+    window.addEventListener('focus', async () => {
+        const next = await loadAuthenticatedDriver();
+        if (!next || next.id !== driverId) logoutDriverSession();
+    });
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+            loadAuthenticatedDriver().then((next) => {
+                if (!next || next.id !== driverId) logoutDriverSession();
+            });
+        }
+    });
+}
+
+async function checkAuth() {
+    const current = await loadAuthenticatedDriver();
+    if (current) {
+        startDriverSessionGuard(current.id);
         return true;
     }
 
-    try {
-        const doc = await db.collection('drivers').doc(driverId).get();
-        if (doc.exists && doc.data().status !== 'blocked') {
-            driverData = normalizeDriverData({ id: doc.id, ...doc.data() });
-            Cache.setDriver(driverData);
-            syncDriverRoutingMeta(driverData).catch(() => {});
-            return true;
-        }
-    } catch (e) {
-        console.error('Auth check error:', e);
-    }
-
-    Cache.clearAll();
-    window.location.href = 'index.html';
+    logoutDriverSession();
     return false;
 }
 
@@ -245,6 +285,23 @@ function showToast(message) {
     toast.textContent = message;
     toast.classList.add('show');
     setTimeout(() => toast.classList.remove('show'), 3000);
+}
+
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    })[char]);
+}
+
+function safeImageUrl(value) {
+    const url = String(value || '').trim();
+    if (!url) return '';
+    if (!/^(https?:|data:image\/)/i.test(url)) return '';
+    return url.replace(/["'()\\\n\r]/g, '');
 }
 
 // ==================== MODAL ====================

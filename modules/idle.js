@@ -192,18 +192,7 @@ const IdleDriver = {
     },
 
     async updateEligibility(eligible) {
-        if (!driverData) return;
-
-        const finalEligible = this.isStoreDriver() ? false : !!eligible;
-
-        try {
-            await db.collection('drivers').doc(driverData.id).update({
-                appEligible: finalEligible,
-                eligibleSince: finalEligible ? firebase.firestore.FieldValue.serverTimestamp() : null
-            });
-        } catch (e) {
-            console.error('Error updating eligibility:', e);
-        }
+        return !!eligible;
     },
 
     async persistState(event, from, to) {

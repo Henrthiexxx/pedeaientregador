@@ -5,42 +5,60 @@ const FCMModule = {
     messaging: null,
     token: null,
     swReg: null,
+    basePath: null,
+    initPromise: null,
+    listenersRegistered: false,
 
     async init() {
+        if (this.initPromise) return this.initPromise;
+
+        this.initPromise = this.initialize();
+        return this.initPromise;
+    },
+
+    async initialize() {
         if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
             console.log('Push não suportado');
             return false;
         }
         try {
-            const basePath = location.pathname.substring(0, location.pathname.lastIndexOf('/') + 1);
-            this.swReg = await navigator.serviceWorker.register(basePath + 'firebase-messaging-sw.js', {
-                scope: basePath
+            this.basePath = location.pathname.substring(0, location.pathname.lastIndexOf('/') + 1);
+            this.swReg = await navigator.serviceWorker.register(this.basePath + 'firebase-messaging-sw.js', {
+                scope: this.basePath
             });
-            console.log('✅ SW registrado em', basePath);
+            console.log('✅ SW registrado em', this.basePath);
 
             this.messaging = firebase.messaging();
 
-            this.messaging.onMessage((payload) => {
-                console.log('📩 Foreground:', payload);
-                this.handleForegroundNotification(payload);
-            });
+            if (!this.listenersRegistered) {
+                this.messaging.onMessage((payload) => {
+                    console.log('📩 Foreground:', payload);
+                    this.handleForegroundNotification(payload);
+                });
 
-            navigator.serviceWorker.addEventListener('message', (event) => {
-                if (event.data?.type === 'NOTIFICATION_CLICK') {
-                    this.handleNotificationClick(event.data.data || {});
-                }
-            });
+                navigator.serviceWorker.addEventListener('message', (event) => {
+                    if (event.data?.type === 'NOTIFICATION_CLICK') {
+                        this.handleNotificationClick(event.data.data || {});
+                    }
+                });
+
+                this.listenersRegistered = true;
+            }
 
             return true;
         } catch (err) {
             console.error('Erro FCM init:', err);
+            this.initPromise = null;
             return false;
         }
     },
 
-    async requestPermissionAndGetToken() {
+    async requestPermissionAndGetToken(requestPermission = true) {
         try {
-            const permission = await Notification.requestPermission();
+            let permission = Notification.permission;
+            if (permission === 'default' && requestPermission) {
+                permission = await Notification.requestPermission();
+            }
             if (permission !== 'granted') return null;
 
             const vapidKey = 'BLt2icpkQT3LTtfJJybWVF4xjkZ1_L4dmt_qRszLGJF6ACFOK3MGtIIVgokt9l-zh5dSa1FqKG-XstNZVTrMpCc';
@@ -73,20 +91,6 @@ const FCMModule = {
             fcmTokens: firebase.firestore.FieldValue.arrayUnion(this.token),
             lastTokenUpdate: firebase.firestore.FieldValue.serverTimestamp()
         };
-
-        if (
-            userType === 'driver' &&
-            typeof normalizeDriverData === 'function' &&
-            typeof driverData !== 'undefined' &&
-            driverData &&
-            driverData.id === userId
-        ) {
-            const normalized = normalizeDriverData(driverData);
-            payload.deliveryPool = normalized.deliveryPool;
-            payload.primaryStoreId = normalized.primaryStoreId || null;
-            payload.routingStoreIds = normalized.routingStoreIds || [];
-            payload.pushRoutingUpdatedAt = firebase.firestore.FieldValue.serverTimestamp();
-        }
 
         try {
             await db.collection(col).doc(userId).set(payload, { merge: true });
@@ -138,7 +142,7 @@ const FCMModule = {
                 urgent: false
             },
             marketing: {
-                title: notif.title || data.title || '🎉 Pedrad',
+                title: notif.title || data.title || '🎉 Pedra Delivery',
                 body: notif.body || data.body || 'Confira!',
                 urgent: false
             }
@@ -158,13 +162,16 @@ const FCMModule = {
             navigator.vibrate(msg.urgent ? [300, 100, 300, 100, 300] : [200, 100, 200]);
         }
 
-        if (Notification.permission === 'granted') {
-            new Notification(title, {
+        if (Notification.permission === 'granted' && this.swReg) {
+            this.swReg.showNotification(title, {
                 body,
-                icon: '/pedeaientregador/icon-192.png',
+                icon: this.basePath + 'icon-192.png',
                 tag: data.orderId || `pedrad-${type}`,
-                data
-            });
+                data: {
+                    ...data,
+                    click_action: data.click_action || new URL('home.html', location.href).href
+                }
+            }).catch(err => console.error('Erro ao exibir notificação:', err));
         }
     },
 
@@ -178,10 +185,11 @@ const FCMModule = {
 
 // ==================== SETUP FUNCTIONS ====================
 
-async function setupDriverPushNotifications() {
+async function setupDriverPushNotifications(options = {}) {
+    const requestPermission = options.requestPermission !== false;
     const initialized = await FCMModule.init();
     if (!initialized) return;
-    const token = await FCMModule.requestPermissionAndGetToken();
+    const token = await FCMModule.requestPermissionAndGetToken(requestPermission);
     if (token && typeof driverData !== 'undefined' && driverData) {
         await FCMModule.saveTokenToFirestore(driverData.id, 'driver');
     }

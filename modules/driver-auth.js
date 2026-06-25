@@ -1,5 +1,5 @@
 // ==================== DRIVER AUTH MODULE ====================
-// Handles: login, temp password (hard reset), status check, email verification
+// Handles: login, signup, status check, email verification
 // Drop-in replacement for basic login flow in driver's index.html
 //
 // USAGE: Replace your current handleLogin with:
@@ -16,6 +16,20 @@ const DriverAuth = (() => {
             throw new Error('Firebase Auth não carregado');
         }
         return firebase.auth();
+    }
+
+    // Converte qualquer erro tecnico em mensagem amigavel com codigo de 3 digitos.
+    function toFriendlyError(err) {
+        if (typeof ErrorCodes !== 'undefined') return ErrorCodes.toFriendly(err);
+        try { console.error('Erro:', err && (err.code || err.message)); } catch (_) {}
+        return 'Ocorreu um erro. Tente novamente. (Erro 999)';
+    }
+
+    function persistSession(driver) {
+        if (!driver || !driver.id || typeof Cache === 'undefined') return;
+        Cache.setDriverId(driver.id);
+        Cache.setDriver(driver);
+        Cache.setOnline(false);
     }
 
     function buildDriverPayload(input) {
@@ -82,65 +96,22 @@ const DriverAuth = (() => {
             return false;
         }
 
-        // Step 1: Find driver doc by email
-        let driverDoc = null;
-        let driverData = null;
-        try {
-            const snap = await db.collection('drivers').where('email', '==', email).limit(1).get();
-            if (!snap.empty) {
-                driverDoc = snap.docs[0];
-                driverData = { id: driverDoc.id, ...driverDoc.data() };
-            }
-        } catch (err) {
-            console.error('Error finding driver:', err);
-        }
-
-        // Step 2: Check if driver exists
-        if (!driverData) {
-            showToast('Email não cadastrado');
-            return false;
-        }
-
-        // Step 3: Check status before attempting login
-        if (driverData.status === 'pending') {
-            showToast('Seu cadastro está aguardando aprovação do administrador');
-            return false;
-        }
-        if (driverData.status === 'blocked') {
-            showToast('Sua conta está bloqueada. Entre em contato com a administração');
-            return false;
-        }
-
-        // Step 4: Try Firebase Auth login
+        // Authenticate first, then resolve the driver doc through authUid.
         try {
             await getAuth().signInWithEmailAndPassword(email, password);
-            // Success! Clear any temp password flags
-            if (driverData.passwordOverride) {
-                await db.collection('drivers').doc(driverData.id).update({
-                    passwordOverride: false,
-                    tempPassword: firebase.firestore.FieldValue.delete()
-                });
+
+            const validated = await validateSession(getAuth().currentUser);
+            if (!validated) {
+                await getAuth().signOut();
+                showToast('Sessão inválida. Faça login novamente.');
+                return false;
             }
+
+            persistSession(validated);
             return true;
         } catch (authErr) {
-            console.log('Firebase Auth failed:', authErr.code);
-
-            // Step 5: If auth fails AND there's a temp password (hard reset), try it
-            if (driverData.passwordOverride && driverData.tempPassword) {
-                if (password === driverData.tempPassword) {
-                    return await handleTempPasswordLogin(driverData, password);
-                }
-            }
-
-            // Auth failed and no temp password match
-            const msgs = {
-                'auth/wrong-password': 'Senha incorreta',
-                'auth/invalid-credential': 'Email ou senha incorretos',
-                'auth/user-not-found': 'Conta não encontrada',
-                'auth/too-many-requests': 'Muitas tentativas. Aguarde alguns minutos',
-                'auth/user-disabled': 'Conta desativada'
-            };
-            showToast(msgs[authErr.code] || 'Erro ao entrar: ' + authErr.message);
+            // Nunca exibir o texto tecnico cru ao usuario — usar codigo interno.
+            showToast(toFriendlyError(authErr));
             return false;
         }
     }
@@ -165,17 +136,12 @@ const DriverAuth = (() => {
         }
 
         try {
-            const existing = await db.collection('drivers').where('email', '==', data.email).limit(1).get();
-            if (!existing.empty) {
-                showToast('Este e-mail já está cadastrado');
-                return false;
-            }
-
             const auth = getAuth();
             const cred = await auth.createUserWithEmailAndPassword(data.email, password);
             await cred.user.sendEmailVerification();
 
-            await db.collection('drivers').doc(cred.user.uid).set({
+            try {
+                await db.collection('drivers').doc(cred.user.uid).set({
                 ...data,
                 authUid: cred.user.uid,
                 status: 'pending',
@@ -185,121 +151,18 @@ const DriverAuth = (() => {
                 registeredAt: firebase.firestore.FieldValue.serverTimestamp(),
                 createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            });
+                });
+            } catch (writeErr) {
+                try { await cred.user.delete(); } catch (_) {}
+                throw writeErr;
+            }
 
             await auth.signOut();
             clearSession();
             showToast('Cadastro enviado. Aguarde aprovação do administrador.');
             return true;
         } catch (err) {
-            const msgs = {
-                'auth/email-already-in-use': 'Este e-mail já está em uso',
-                'auth/invalid-email': 'E-mail inválido',
-                'auth/weak-password': 'Senha muito fraca'
-            };
-            showToast(msgs[err.code] || ('Erro ao cadastrar: ' + err.message));
-            return false;
-        }
-    }
-
-    // ==================== TEMP PASSWORD LOGIN ====================
-    async function handleTempPasswordLogin(driverData, tempPassword) {
-        try {
-            // If driver has an auth account, update its password to the temp one
-            if (driverData.authUid) {
-                // We can't update another user's password from client SDK
-                // So we try: sign in with the reset email link approach
-                // Or: if the auth account was recreated, sign in directly
-
-                // Try creating a secondary app to update password
-                const auth = getAuth();
-                const tempApp = firebase.initializeApp(
-                    auth.app.options,
-                    'tempLogin_' + Date.now()
-                );
-                const tempAuth = tempApp.auth();
-
-                try {
-                    // Try signing in - maybe the password was already updated
-                    await tempAuth.signInWithEmailAndPassword(driverData.email, tempPassword);
-                    await tempAuth.signOut();
-                    await tempApp.delete();
-
-                    // Now sign in on main auth
-                    await getAuth().signInWithEmailAndPassword(driverData.email, tempPassword);
-
-                    // Clear temp password
-                    await db.collection('drivers').doc(driverData.id).update({
-                        passwordOverride: false,
-                        tempPassword: firebase.firestore.FieldValue.delete()
-                    });
-
-                    showToast('✅ Login com senha temporária. Altere sua senha em breve!');
-                    return true;
-                } catch (e) {
-                    await tempApp.delete();
-
-                    // Auth account has different password - need to delete and recreate
-                    // This can only be done server-side, so we use Firestore-only auth as fallback
-                    return handleFirestoreOnlyLogin(driverData);
-                }
-            } else {
-                // No auth account - create one with temp password
-                return await createAuthAndLogin(driverData, tempPassword);
-            }
-        } catch (err) {
-            console.error('Temp password login error:', err);
-            showToast('Erro no login temporário');
-            return false;
-        }
-    }
-
-    // ==================== FIRESTORE-ONLY FALLBACK ====================
-    // When Firebase Auth can't be updated (hard reset scenario),
-    // use Firestore temp password to grant access
-    async function handleFirestoreOnlyLogin(driverData) {
-        // Store session in localStorage
-        localStorage.setItem('driverId', driverData.id);
-        localStorage.setItem('driverAuthFallback', 'true');
-
-        // Update driver as active
-        await db.collection('drivers').doc(driverData.id).update({
-            status: driverData.status === 'approved' ? 'active' : driverData.status,
-            lastLoginAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-
-        showToast('⚠️ Login de emergência. Redefina sua senha o mais rápido possível!');
-
-        // Redirect to main page
-        window.location.href = 'home.html';
-        return true;
-    }
-
-    // ==================== CREATE AUTH ACCOUNT ====================
-    async function createAuthAndLogin(driverData, password) {
-        try {
-            const auth = getAuth();
-            const cred = await auth.createUserWithEmailAndPassword(driverData.email, password);
-            await cred.user.sendEmailVerification();
-
-            // Save auth UID
-            await db.collection('drivers').doc(driverData.id).update({
-                authUid: cred.user.uid,
-                passwordOverride: false,
-                tempPassword: firebase.firestore.FieldValue.delete(),
-                status: driverData.status === 'approved' ? 'active' : driverData.status
-            });
-
-            showToast('✅ Conta criada! Verifique seu email.');
-            return true;
-        } catch (err) {
-            if (err.code === 'auth/email-already-in-use') {
-                // Auth account exists but we don't know the password
-                // Fall back to Firestore-only
-                return handleFirestoreOnlyLogin(driverData);
-            }
-            console.error(err);
-            showToast('Erro ao criar conta');
+            showToast(toFriendlyError(err));
             return false;
         }
     }
@@ -307,45 +170,32 @@ const DriverAuth = (() => {
     // ==================== SESSION VALIDATION ====================
     // Call this in your auth.onAuthStateChanged or on page load
     async function validateSession(firebaseUser) {
+        if (!firebaseUser) {
+            return null;
+        }
+
         let driverSnap;
 
-        if (firebaseUser) {
-            try {
-                await firebaseUser.getIdToken(true);
-            } catch (err) {
-                console.warn('Sessão do entregador inválida ou revogada:', err?.code || err?.message || err);
-                clearSession();
-                await auth.signOut();
-                showToast('Sessão expirada. Faça login novamente.');
-                return null;
-            }
+        try {
+            await firebaseUser.getIdToken(true);
+        } catch (err) {
+            console.warn('Sessão do entregador inválida ou revogada:', err?.code || err?.message || err);
+            clearSession();
+            await getAuth().signOut();
+            showToast('Sessão expirada. Faça login novamente.');
+            return null;
+        }
 
-            // Find by authUid
+        // Find by authUid
+        try {
             driverSnap = await db.collection('drivers')
                 .where('authUid', '==', firebaseUser.uid)
                 .limit(1).get();
-        } else {
-            // Check fallback session
-            const fallback = localStorage.getItem('driverAuthFallback');
-            const dId = localStorage.getItem('driverId');
-            if (!fallback || !dId) return null;
-
-            const doc = await db.collection('drivers').doc(dId).get();
-            if (!doc.exists) { clearSession(); return null; }
-
-            const data = { id: doc.id, ...doc.data() };
-            if (!data.passwordOverride) {
-                // Temp access expired, admin cleared override
-                clearSession();
-                showToast('Sessão temporária expirada. Faça login novamente.');
-                return null;
-            }
-            if (data.sessionRevokedAt || data.status === 'blocked') {
-                clearSession();
-                showToast('Sessão encerrada pelo administrador.');
-                return null;
-            }
-            return data;
+        } catch (queryErr) {
+            // Ex.: permission-denied ao ler o proprio cadastro. Propaga para quem
+            // chamou tratar (login mostra Erro 201); o boot protege com try/catch.
+            try { console.error('validateSession query falhou:', queryErr?.code || queryErr); } catch (_) {}
+            throw queryErr;
         }
 
         if (driverSnap.empty) return null;
@@ -354,12 +204,12 @@ const DriverAuth = (() => {
 
         // Check status
         if (data.status === 'blocked' || data.sessionRevokedAt) {
-            await auth.signOut();
+            await getAuth().signOut();
             showToast(data.sessionRevokedAt ? 'Sessão encerrada pelo administrador' : 'Conta bloqueada');
             return null;
         }
         if (data.status === 'pending') {
-            await auth.signOut();
+            await getAuth().signOut();
             showToast('Cadastro aguardando aprovação');
             return null;
         }
@@ -370,18 +220,15 @@ const DriverAuth = (() => {
             data.emailVerified = true;
         }
 
-        // Set active on first successful validated login
-        if (data.status === 'approved') {
-            await db.collection('drivers').doc(data.id).update({ status: 'active' });
-            data.status = 'active';
-        }
-
         return data;
     }
 
     function clearSession() {
         localStorage.removeItem('driverId');
         localStorage.removeItem('driverAuthFallback');
+        if (typeof Cache !== 'undefined') {
+            Cache.clearAll();
+        }
     }
 
     // ==================== PASSWORD CHANGE ====================
@@ -405,13 +252,9 @@ const DriverAuth = (() => {
 
             // Update password
             await user.updatePassword(newPassword);
-
-            // Clear any override flags
-            const dId = localStorage.getItem('driverId');
+            const dId = (typeof Cache !== 'undefined' && Cache.getDriverId()) || localStorage.getItem('driverId');
             if (dId) {
                 await db.collection('drivers').doc(dId).update({
-                    passwordOverride: false,
-                    tempPassword: firebase.firestore.FieldValue.delete(),
                     passwordChangedAt: firebase.firestore.FieldValue.serverTimestamp()
                 });
             }
@@ -419,12 +262,10 @@ const DriverAuth = (() => {
             showToast('✅ Senha alterada com sucesso!');
             return true;
         } catch (err) {
-            const msgs = {
-                'auth/wrong-password': 'Senha atual incorreta',
-                'auth/requires-recent-login': 'Sessão expirada. Faça login novamente',
-                'auth/weak-password': 'Senha muito fraca'
-            };
-            showToast(msgs[err.code] || 'Erro: ' + err.message);
+            // 'auth/wrong-password' aqui = senha ATUAL incorreta (reautenticacao).
+            showToast(err.code === 'auth/wrong-password'
+                ? 'Senha atual incorreta. (Erro 101)'
+                : toFriendlyError(err));
             return false;
         }
     }
@@ -444,7 +285,7 @@ const DriverAuth = (() => {
             await user.verifyBeforeUpdateEmail(newEmail);
 
             // Update in Firestore
-            const dId = localStorage.getItem('driverId');
+            const dId = (typeof Cache !== 'undefined' && Cache.getDriverId()) || localStorage.getItem('driverId');
             if (dId) {
                 await db.collection('drivers').doc(dId).update({
                     email: newEmail.toLowerCase(),
@@ -456,13 +297,7 @@ const DriverAuth = (() => {
             showToast('📧 Email de verificação enviado para ' + newEmail);
             return true;
         } catch (err) {
-            const msgs = {
-                'auth/email-already-in-use': 'Este email já está em uso',
-                'auth/invalid-email': 'Email inválido',
-                'auth/wrong-password': 'Senha incorreta',
-                'auth/requires-recent-login': 'Faça login novamente'
-            };
-            showToast(msgs[err.code] || 'Erro: ' + err.message);
+            showToast(toFriendlyError(err));
             return false;
         }
     }
@@ -480,18 +315,18 @@ const DriverAuth = (() => {
             if (err.code === 'auth/too-many-requests') {
                 showToast('Aguarde antes de reenviar');
             } else {
-                showToast('Erro: ' + err.message);
+                showToast(toFriendlyError(err));
             }
         }
     }
 
     // ==================== CHECK EMAIL STATUS ====================
     async function refreshEmailStatus() {
-        const user = auth.currentUser;
+        const user = getAuth().currentUser;
         if (!user) return false;
         await user.reload();
         if (user.emailVerified) {
-            const dId = localStorage.getItem('driverId');
+            const dId = (typeof Cache !== 'undefined' && Cache.getDriverId()) || localStorage.getItem('driverId');
             if (dId) {
                 await db.collection('drivers').doc(dId).update({ emailVerified: true });
             }
@@ -505,6 +340,7 @@ const DriverAuth = (() => {
         login,
         register,
         validateSession,
+        persistSession,
         changePassword,
         changeEmail,
         resendVerification,
