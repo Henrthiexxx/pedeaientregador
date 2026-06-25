@@ -5,8 +5,12 @@
 // que pode servir cache errado ou gerar erros de fetch antes do app atual
 // assumir com "sw.js". Este arquivo existe apenas para:
 // 1. limpar caches antigos,
-// 2. desregistrar o SW legado,
-// 3. recarregar as abas para o app atual registrar o SW correto.
+// 2. desregistrar o SW legado.
+//
+// IMPORTANTE: NAO forcar reload das abas aqui. Chamar client.navigate() dentro
+// do activate de um SW que se auto-desregistra provoca LOOP de reload (o script
+// ainda e servido e a aba reentra no ciclo install/activate). A pagina assume o
+// SW correto naturalmente na proxima navegacao do usuario.
 
 self.addEventListener('install', function () {
   self.skipWaiting();
@@ -23,12 +27,7 @@ self.addEventListener('activate', function (event) {
       await self.registration.unregister();
     } catch (e) {}
 
-    try {
-      var clients = await self.clients.matchAll({ type: 'window' });
-      clients.forEach(function (client) {
-        try { client.navigate(client.url); } catch (e) {}
-      });
-    } catch (e) {}
+    // Sem client.navigate(): evita o loop de service worker.
   })());
 });
 

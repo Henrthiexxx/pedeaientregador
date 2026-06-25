@@ -1,7 +1,7 @@
 /* ==================== PEDRA DELIVERY SERVICE WORKER (CACHE + FCM) ==================== */
 /* ÚNICO SW por scope: PWA cache + Firebase Messaging */
 
-const CACHE_VERSION = 6;
+const CACHE_VERSION = 7;
 const CACHE_NAME = 'pedrad-v' + CACHE_VERSION;
 
 // Path dinâmico — funciona em qualquer subdiretório
