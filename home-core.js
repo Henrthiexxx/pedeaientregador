@@ -62,6 +62,7 @@ function buildAvailableOrdersQuery() {
     // Não depende mais de salesChannel — se é da loja vinculada, é dele.
     if (isStoreBoundDriver(driverData) && linkedStoreIds.length) {
         let query = db.collection('orders')
+            .where('driverId', '==', null)
             .where('status', 'in', ['preparing', 'ready'])
             .where('orderType', '==', 'delivery')
             .where('deliveryPool', '==', 'store');
@@ -73,6 +74,7 @@ function buildAvailableOrdersQuery() {
 
     // Entregador avulso: apenas pedidos com pool 'app' (lojas sem vínculo).
     return db.collection('orders')
+        .where('driverId', '==', null)
         .where('deliveryPool', '==', 'app')
         .where('status', 'in', ['preparing', 'ready'])
         .where('orderType', '==', 'delivery');
