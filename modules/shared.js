@@ -87,6 +87,23 @@ function waitForAuthUser() {
     });
 }
 
+// Resolve o doc do entregador pelo uid via callable (admin SDK) quando
+// drivers/{uid} não existe/é negado — entregadores criados pelo admin têm id
+// automático (authUid é só um campo). Ver admin/functions/index.js e
+// [[drivers-get-not-list]].
+async function resolveDriverByUid() {
+    try {
+        const f = (typeof fns !== 'undefined' && fns) ? fns
+            : ((typeof firebase !== 'undefined' && firebase.functions) ? firebase.functions() : null);
+        if (!f) return null;
+        const res = await f.httpsCallable('resolveDriverByUid')();
+        return (res && res.data && res.data.driver) ? res.data.driver : null;
+    } catch (e) {
+        try { console.error('resolveDriverByUid falhou:', e?.code || e); } catch (_) {}
+        return null;
+    }
+}
+
 async function loadAuthenticatedDriver() {
     const auth = firebase.auth?.();
     const user = auth?.currentUser || await waitForAuthUser();
@@ -94,17 +111,20 @@ async function loadAuthenticatedDriver() {
 
     try {
         await user.getIdToken(true);
-        const snapshot = await db.collection('drivers')
-            .where('authUid', '==', user.uid)
-            .limit(1)
-            .get();
 
-        if (snapshot.empty) {
-            return null;
+        // 1) Caminho rápido: entregador auto-cadastrado tem doc id == uid.
+        let data = null;
+        try {
+            const doc = await db.collection('drivers').doc(user.uid).get();
+            if (doc.exists) data = { id: doc.id, ...doc.data() };
+        } catch (denied) {
+            // Entregador criado pelo admin (id != uid): get por uid é negado
+            // pelas regras (list). Resolve via callable abaixo em vez de falhar.
+            try { console.warn('get(drivers/uid) falhou, resolvendo por uid:', denied?.code || denied); } catch (_) {}
         }
+        if (!data) data = await resolveDriverByUid();
+        if (!data) return null;
 
-        const doc = snapshot.docs[0];
-        const data = { id: doc.id, ...doc.data() };
         if (isDriverSessionRevoked(data) || data.status === 'pending') {
             return null;
         }

@@ -174,8 +174,6 @@ const DriverAuth = (() => {
             return null;
         }
 
-        let driverSnap;
-
         try {
             await firebaseUser.getIdToken(true);
         } catch (err) {
@@ -186,21 +184,28 @@ const DriverAuth = (() => {
             return null;
         }
 
-        // Find by authUid
+        let data = null;
+
+        // 1) Caminho rápido: entregador AUTO-cadastrado tem doc id == uid == authUid
+        //    (register() usa doc(uid).set()). Leitura direta por ID é permitida.
         try {
-            driverSnap = await db.collection('drivers')
-                .where('authUid', '==', firebaseUser.uid)
-                .limit(1).get();
+            const snap = await db.collection('drivers').doc(firebaseUser.uid).get();
+            if (snap.exists) data = { id: snap.id, ...snap.data() };
         } catch (queryErr) {
-            // Ex.: permission-denied ao ler o proprio cadastro. Propaga para quem
-            // chamou tratar (login mostra Erro 201); o boot protege com try/catch.
-            try { console.error('validateSession query falhou:', queryErr?.code || queryErr); } catch (_) {}
-            throw queryErr;
+            // Pode ser permission-denied quando o entregador foi criado pelo ADMIN
+            // (doc com id automático; authUid é só um campo). Não propaga: resolve
+            // pelo uid via callable abaixo, em vez de mostrar Erro 201.
+            try { console.warn('get(drivers/uid) falhou, resolvendo por uid:', queryErr?.code || queryErr); } catch (_) {}
         }
 
-        if (driverSnap.empty) return null;
+        // 2) Entregador criado pelo admin (id != uid): a query where('authUid'==uid)
+        //    é negada pelas regras (list), então resolvemos via Cloud Function
+        //    (admin SDK) que retorna só o doc cujo authUid bate com o chamador.
+        if (!data) {
+            data = await resolveDriverByUid();
+        }
 
-        const data = { id: driverSnap.docs[0].id, ...driverSnap.docs[0].data() };
+        if (!data) return null;
 
         // Check status
         if (data.status === 'blocked' || data.sessionRevokedAt) {
@@ -221,6 +226,21 @@ const DriverAuth = (() => {
         }
 
         return data;
+    }
+
+    // Resolve o doc do entregador pelo uid quando drivers/{uid} não existe/é negado
+    // (entregadores criados pelo admin têm id automático). Usa a callable
+    // resolveDriverByUid (admin SDK, ignora regras com segurança). Retorna
+    // { id, ...campos } ou null. Ver admin/functions/index.js.
+    async function resolveDriverByUid() {
+        try {
+            if (typeof fns === 'undefined' || !fns) return null;
+            const res = await fns.httpsCallable('resolveDriverByUid')();
+            return (res && res.data && res.data.driver) ? res.data.driver : null;
+        } catch (e) {
+            try { console.error('resolveDriverByUid falhou:', e?.code || e); } catch (_) {}
+            return null;
+        }
     }
 
     function clearSession() {
@@ -320,6 +340,25 @@ const DriverAuth = (() => {
         }
     }
 
+    // ==================== SEND PASSWORD RESET (self-service) ====================
+    // Envia link oficial de redefinição para o e-mail do proprio entregador.
+    // Nunca expõe/define senha — o usuário escolhe a nova senha pelo link.
+    async function sendPasswordReset() {
+        const user = getAuth().currentUser;
+        const email = (user && user.email)
+            || (typeof Cache !== 'undefined' && Cache.getDriver && Cache.getDriver()?.email)
+            || '';
+        if (!email) { showToast('E-mail não encontrado. Faça login novamente.'); return false; }
+        try {
+            await getAuth().sendPasswordResetEmail(email);
+            showToast('📧 Enviamos um link de redefinição para ' + email);
+            return true;
+        } catch (err) {
+            showToast(toFriendlyError(err));
+            return false;
+        }
+    }
+
     // ==================== CHECK EMAIL STATUS ====================
     async function refreshEmailStatus() {
         const user = getAuth().currentUser;
@@ -343,6 +382,7 @@ const DriverAuth = (() => {
         persistSession,
         changePassword,
         changeEmail,
+        sendPasswordReset,
         resendVerification,
         refreshEmailStatus,
         clearSession

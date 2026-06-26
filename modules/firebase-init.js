@@ -12,3 +12,5 @@ if (!firebase.apps.length) {
     firebase.initializeApp(firebaseConfig);
 }
 const db = firebase.firestore();
+// Callables (ex.: resolveDriverByUid no login). Region us-central1 (default das functions).
+const fns = (typeof firebase.functions === 'function') ? firebase.functions() : null;
