@@ -1,8 +1,8 @@
 /* ==================== PEDRA DELIVERY SERVICE WORKER (CACHE + FCM) ==================== */
 /* ÚNICO SW por scope: PWA cache + Firebase Messaging */
 
-const CACHE_VERSION = 7;
-const CACHE_NAME = 'pedrad-v' + CACHE_VERSION;
+const CACHE_VERSION = '2026-06-25-1';
+const CACHE_NAME = 'pedrad-driver-v' + CACHE_VERSION;
 
 // Path dinâmico — funciona em qualquer subdiretório
 const APP_BASE = new URL(self.registration.scope).pathname;
@@ -29,7 +29,10 @@ self.addEventListener('activate', (event) => {
     event.waitUntil((async () => {
         const names = await caches.keys();
         await Promise.all(
-            names.filter(n => n.startsWith('pedrad-v') && n !== CACHE_NAME).map(n => caches.delete(n))
+            names.filter(n =>
+                (n.startsWith('pedrad-driver-v') || n.startsWith('pedrad-v')) &&
+                n !== CACHE_NAME
+            ).map(n => caches.delete(n))
         );
         await self.clients.claim();
     })());

@@ -1,5 +1,5 @@
-const CACHE_VERSION = 4;
-const CACHE_NAME = 'pedrad-v' + CACHE_VERSION;
+const CACHE_VERSION = '2026-06-25-1';
+const CACHE_NAME = 'pedrad-driver-v' + CACHE_VERSION;
 const urlsToCache = [
     './',
     'index.html',
@@ -20,7 +20,10 @@ self.addEventListener('activate', event => {
     event.waitUntil(
         caches.keys().then(names =>
             Promise.all(
-                names.filter(n => n.startsWith('pedrad-v') && n !== CACHE_NAME)
+                names.filter(n =>
+                    (n.startsWith('pedrad-driver-v') || n.startsWith('pedrad-v')) &&
+                    n !== CACHE_NAME
+                )
                     .map(n => caches.delete(n))
             )
         ).then(() => self.clients.claim())
