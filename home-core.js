@@ -2,14 +2,15 @@
 var currentUser = null;
 var driverData = null;
 var isOnline = false;
-var currentDelivery = null;
+var currentDelivery = null;      // entrega "primária" (usada para GPS/mapa)
+var deliveringOrders = [];        // TODAS as entregas em andamento (render em lista)
+var deliverTargetId = null;       // pedido que está sendo finalizado no modal
 var acceptedOrders = [];
 var availableOrders = [];
 var allHistory = [];
 var historyFilter = 'week';
 
 var pendingAcceptOrder = null;
-var capturedLocation = null;
 
 var onlineInterval = null;
 var availableOrdersUnsub = null;
@@ -121,16 +122,19 @@ function setupListeners() {
                 const myOrders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 acceptedOrders = myOrders.filter(o => o.status === 'preparing' || o.status === 'ready');
                 renderAcceptedOrders();
-                const delivering = myOrders.find(o => o.status === 'delivering');
-                if (delivering) {
+                const delivering = myOrders.filter(o => o.status === 'delivering');
+                if (delivering.length) {
                     const wasDelivering = !!currentDelivery;
-                    currentDelivery = delivering;
+                    deliveringOrders = delivering;
+                    currentDelivery = delivering[0];
                     renderCurrentDelivery();
                     if (!wasDelivering) startLocationTracking();
                 } else {
                     if (currentDelivery) stopLocationTracking();
+                    deliveringOrders = [];
                     currentDelivery = null;
                     document.getElementById('currentDeliverySection').style.display = 'none';
+                    hideNavMapButton();
                 }
                 showNavMapButton();
                 updateStats();
@@ -364,15 +368,21 @@ async function executeStartDelivery(order) {
     } catch (e) { console.error('Error starting delivery:', e); showToast('Erro ao iniciar entrega'); }
 }
 
+function getDeliveringOrder(id) {
+    if (!id) return currentDelivery;
+    return deliveringOrders.find(o => o.id === id)
+        || (currentDelivery && currentDelivery.id === id ? currentDelivery : null);
+}
+
 async function confirmDelivery() {
-    if (!currentDelivery) return;
-    const deliveryRef = currentDelivery;
-    stopLocationTracking();
+    const deliveryRef = getDeliveringOrder(deliverTargetId) || currentDelivery;
+    if (!deliveryRef) return;
+    // Se estamos finalizando justamente o pedido rastreado por GPS, para o watch.
+    if (currentDelivery && deliveryRef.id === currentDelivery.id) stopLocationTracking();
     try {
         const timeline = deliveryRef.timeline || [];
-        timeline.push({ status: 'delivered', timestamp: new Date().toISOString(), message: 'Pedido entregue ao cliente', location: capturedLocation });
+        timeline.push({ status: 'delivered', timestamp: new Date().toISOString(), message: 'Pedido entregue ao cliente' });
         const updateData = { status: 'delivered', timeline, deliveredAt: new Date().toISOString(), driverLocation: null };
-        if (capturedLocation) updateData.deliveryLocation = capturedLocation;
         await db.collection('orders').doc(deliveryRef.id).update(updateData);
         if (IdleDriver.isStoreDriver()) {
             IdleDriver.transition(deliveryRef.storeId === getLinkedStoreIds(driverData)[0] ? 'STORE_DELIVERY_DONE' : 'APP_TRIP_ENDED');
@@ -380,9 +390,8 @@ async function confirmDelivery() {
         Cache.remove('history');
         const earning = deliveryRef.driverEarning || platformConfig.driverFee;
         closeModal('deliverModal');
-        hideNavMapButton();
+        deliverTargetId = null;
         showToast(`Entrega concluída +${formatCurrency(earning)}`);
-        capturedLocation = null;
     } catch (e) { console.error('Error confirming delivery:', e); showToast('Erro: ' + (e.message || 'Tente novamente')); }
 }
 

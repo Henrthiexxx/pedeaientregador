@@ -49,8 +49,8 @@ function buildStoreAddressText(storeLike) {
     return neighborhood;
 }
 
-async function copyClientField(type) {
-    const order = currentDelivery;
+async function copyClientField(type, orderId) {
+    const order = orderId ? getDeliveringOrder(orderId) : currentDelivery;
     if (!order) return;
 
     const clientName = normalizeCopyText(order.userName || 'Cliente');
@@ -321,23 +321,24 @@ function renderAcceptedOrders() {
     });
 }
 
-function renderCurrentDelivery() {
-    if (!currentDelivery) return;
-    document.getElementById('currentDeliverySection').style.display = 'block';
-    const fee        = getDeliveryFee(currentDelivery.address?.neighborhood);
-    const earning    = calculateDriverEarning(currentDelivery.driverEarning || fee, currentDelivery.distance);
-    const clientName = escapeHtml(currentDelivery.userName || 'Cliente');
-    const clientPhone= escapeHtml(currentDelivery.userPhone || '');
-    const clientAddressText = escapeHtml(buildClientAddressText(currentDelivery));
-    const storeName = escapeHtml(currentDelivery.storeName || 'Loja');
-    const storeAddressFallback = escapeHtml(buildStoreAddressText(currentDelivery));
-    const street = escapeHtml(currentDelivery.address?.street || '');
-    const number = escapeHtml(currentDelivery.address?.number || '');
-    const complement = escapeHtml(currentDelivery.address?.complement || '');
-    const reference = escapeHtml(currentDelivery.address?.reference || '');
-    document.getElementById('currentDelivery').innerHTML = `
+function buildDeliveryCardHtml(order, index, total) {
+    const fee        = getDeliveryFee(order.address?.neighborhood);
+    const earning    = calculateDriverEarning(order.driverEarning || fee, order.distance);
+    const clientName = escapeHtml(order.userName || 'Cliente');
+    const clientPhone= escapeHtml(order.userPhone || '');
+    const clientAddressText = escapeHtml(buildClientAddressText(order));
+    const storeName = escapeHtml(order.storeName || 'Loja');
+    const storeAddressFallback = escapeHtml(buildStoreAddressText(order));
+    const street = escapeHtml(order.address?.street || '');
+    const number = escapeHtml(order.address?.number || '');
+    const complement = escapeHtml(order.address?.complement || '');
+    const reference = escapeHtml(order.address?.reference || '');
+    const orderId = order.id;
+    const seq = total > 1 ? `<span class="current-delivery-status" style="background:var(--bg-input);color:var(--text-muted);margin-right:6px;">${index + 1}º</span>` : '';
+    return `
+    <div class="current-delivery" id="delivering-${orderId}" style="margin-bottom:16px;">
         <div class="current-delivery-header">
-            <div class="current-delivery-title">Pedido #${currentDelivery.id.slice(-6).toUpperCase()}</div>
+            <div class="current-delivery-title">${seq}Pedido #${orderId.slice(-6).toUpperCase()}</div>
             <span class="current-delivery-status status-delivering">Entregar</span>
         </div>
         <div class="tracking-indicator">
@@ -354,7 +355,7 @@ function renderCurrentDelivery() {
                 <div class="route-address">
                     <div class="route-address-label">Retirar</div>
                     <div class="route-address-text">${storeName}</div>
-                    <div class="route-address-text" id="pickupStoreAddress" style="font-size:.8rem;color:var(--text-muted);margin-top:3px;">
+                    <div class="route-address-text" id="pickupStoreAddress-${orderId}" style="font-size:.8rem;color:var(--text-muted);margin-top:3px;">
                         ${storeAddressFallback || 'Endereço da loja não informado'}
                     </div>
                 </div>
@@ -371,10 +372,10 @@ function renderCurrentDelivery() {
             ${complement ? `<div style="font-size:0.8rem;color:var(--text-muted);margin-top:8px;">${complement}</div>` : ''}
             ${reference ? `<div style="font-size:0.8rem;color:var(--text-muted);">Ref: ${reference}</div>` : ''}
             <div class="client-copy-actions">
-                <button class="btn btn-secondary btn-sm" onclick="copyClientField('phone')">Copiar telefone</button>
-                <button class="btn btn-secondary btn-sm" onclick="copyClientField('name')">Copiar nome</button>
-                <button class="btn btn-secondary btn-sm" onclick="copyClientField('address')" ${clientAddressText ? '' : 'disabled'}>Copiar endereço</button>
-                <button class="btn btn-primary btn-sm" onclick="copyClientField('all')">Copiar tudo</button>
+                <button class="btn btn-secondary btn-sm" onclick="copyClientField('phone','${orderId}')">Copiar telefone</button>
+                <button class="btn btn-secondary btn-sm" onclick="copyClientField('name','${orderId}')">Copiar nome</button>
+                <button class="btn btn-secondary btn-sm" onclick="copyClientField('address','${orderId}')" ${clientAddressText ? '' : 'disabled'}>Copiar endereço</button>
+                <button class="btn btn-primary btn-sm" onclick="copyClientField('all','${orderId}')">Copiar tudo</button>
             </div>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding:12px;background:var(--bg-input);border-radius:8px;border:1px solid var(--border);">
@@ -382,19 +383,38 @@ function renderCurrentDelivery() {
             <span style="font-weight:500;color:var(--primary);">${formatCurrency(earning)}</span>
         </div>
         <div class="delivery-actions">
-            <button class="btn btn-success btn-block" onclick="openDeliverModal()">Finalizar Entrega</button>
-        </div>`;
+            <button class="btn btn-success btn-block" onclick="openDeliverModal('${orderId}')">Finalizar Entrega</button>
+        </div>
+    </div>`;
+}
 
-    if (currentDelivery.storeId) {
-        getStoreData(currentDelivery.storeId).then((store) => {
-            const el = document.getElementById('pickupStoreAddress');
+function renderCurrentDelivery() {
+    const orders = (deliveringOrders && deliveringOrders.length)
+        ? deliveringOrders
+        : (currentDelivery ? [currentDelivery] : []);
+    const section = document.getElementById('currentDeliverySection');
+    const container = document.getElementById('currentDelivery');
+    const titleEl = document.getElementById('currentDeliveryTitle');
+    if (!orders.length) { if (section) section.style.display = 'none'; return; }
+
+    section.style.display = 'block';
+    if (titleEl) titleEl.textContent = orders.length > 1
+        ? `Entregas em Andamento (${orders.length})`
+        : 'Entrega em Andamento';
+
+    container.innerHTML = orders.map((o, i) => buildDeliveryCardHtml(o, i, orders.length)).join('');
+
+    orders.forEach(order => {
+        if (!order.storeId) return;
+        getStoreData(order.storeId).then((store) => {
+            const el = document.getElementById('pickupStoreAddress-' + order.id);
             if (!el) return;
             const addr = buildStoreAddressText(store);
             if (addr) el.textContent = addr;
         }).catch((err) => {
             console.error('Erro ao carregar endereço da loja:', err);
         });
-    }
+    });
 }
 
 function updateStats() {
@@ -446,41 +466,17 @@ function startDelivery(orderId) {
 }
 
 // ==================== DELIVER MODAL ====================
-function openDeliverModal() {
-    capturedLocation = null;
+// Finalização sem captura de GPS (era lenta e gerava custo). O entregador
+// apenas confirma a entrega; a localização já é compartilhada em tempo real
+// durante o trajeto.
+function openDeliverModal(orderId) {
+    deliverTargetId = orderId || (currentDelivery && currentDelivery.id) || null;
+    const target = getDeliveringOrder(deliverTargetId);
+    const txt = document.getElementById('deliverModalText');
+    if (txt) txt.textContent = target
+        ? `Confirme que o pedido #${target.id.slice(-6).toUpperCase()} foi entregue ao cliente.`
+        : 'Confirme que o pedido foi entregue ao cliente.';
     openModal('deliverModal');
-    setTimeout(captureLocationAuto, 500);
-}
-
-function captureLocationAuto() {
-    const statusEl = document.getElementById('locationStatus');
-    const btnEl    = document.getElementById('confirmDeliveryBtn');
-    statusEl.innerHTML = '<span class="location-icon">◌</span><span class="location-text">Capturando localização...</span>';
-    statusEl.className = 'location-status loading';
-    btnEl.disabled = true; btnEl.textContent = 'Aguarde GPS...';
-
-    if (!navigator.geolocation) {
-        statusEl.innerHTML = '<span class="location-icon">×</span><span class="location-text">GPS não disponível</span>';
-        statusEl.className = 'location-status error';
-        btnEl.disabled = false; btnEl.textContent = 'Confirmar mesmo assim';
-        return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-        (pos) => {
-            capturedLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy, timestamp: new Date().toISOString() };
-            statusEl.innerHTML = `<span class="location-icon">✓</span><span class="location-text">Localização capturada<br><small>Precisão: ${pos.coords.accuracy.toFixed(0)}m</small></span>`;
-            statusEl.className = 'location-status success';
-            btnEl.disabled = false; btnEl.textContent = 'Confirmar Entrega';
-        },
-        (err) => {
-            const msgs = { 1: 'Permissão negada', 2: 'GPS indisponível', 3: 'Tempo esgotado' };
-            statusEl.innerHTML = `<span class="location-icon">!</span><span class="location-text">${msgs[err.code] || 'Erro ao capturar'}</span>`;
-            statusEl.className = 'location-status error';
-            btnEl.disabled = false; btnEl.textContent = 'Confirmar mesmo assim';
-        },
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-    );
 }
 
 // ==================== NAV MAP ====================
