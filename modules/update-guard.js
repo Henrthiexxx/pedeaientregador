@@ -10,6 +10,7 @@ const AppUpdateGuard = (() => {
         minVersion: '0.0.0',
         latestVersion: '0.0.0',
         downloadUrl: 'https://www.pedradelivery.com.br',
+        downloadPageUrl: 'https://www.pedradelivery.com.br/entregador.html',
         message: 'Atualize o app para continuar usando o entregador.',
         title: 'Atualização obrigatória'
     };
@@ -67,8 +68,11 @@ const AppUpdateGuard = (() => {
                 <p id="appUpdateMessage" style="margin:0 0 10px;color:#a3a3a3;line-height:1.5"></p>
                 <div id="appUpdateMeta" style="font-size:.84rem;color:#7a7a7a;margin-bottom:18px"></div>
                 <div style="display:flex;gap:10px;flex-wrap:wrap">
-                    <a id="appUpdateDownload" href="#" target="_blank" rel="noopener noreferrer" style="flex:1;min-width:180px;text-align:center;text-decoration:none;background:#fff;color:#000;padding:12px 14px;border-radius:12px;font-weight:700">Baixar atualização</a>
+                    <a id="appUpdateDownload" href="#" target="_blank" rel="noopener noreferrer" style="flex:1;min-width:180px;text-align:center;text-decoration:none;background:#fff;color:#000;padding:12px 14px;border-radius:12px;font-weight:700">Abrir download</a>
                     <button id="appUpdateRetry" type="button" style="flex:1;min-width:140px;background:transparent;color:#fff;border:1px solid #333;padding:12px 14px;border-radius:12px;font-weight:700">Verificar novamente</button>
+                </div>
+                <div style="margin-top:12px;color:#7a7a7a;font-size:.74rem;line-height:1.45">
+                    Se o arquivo não baixar direto, a página oficial de download será aberta.
                 </div>
             </div>
         `;
@@ -83,18 +87,32 @@ const AppUpdateGuard = (() => {
         modal.querySelector('#appUpdateMessage').textContent = remote.message || FALLBACK.message;
         modal.querySelector('#appUpdateMeta').textContent = `Versão instalada: ${getLocalVersion()} • mínima exigida: ${remote.minVersion || FALLBACK.minVersion} • disponível: ${remote.latestVersion || FALLBACK.latestVersion}`;
         const link = modal.querySelector('#appUpdateDownload');
-        link.href = remote.downloadUrl || FALLBACK.downloadUrl;
+        link.href = remote.downloadPageUrl || remote.downloadUrl || FALLBACK.downloadPageUrl || FALLBACK.downloadUrl;
+        link.textContent = remote.downloadPageUrl ? 'Abrir página de download' : 'Baixar atualização';
         modal.style.display = 'flex';
     }
 
     async function checkAndBlockIfNeeded() {
-        const remote = await loadRemoteConfig();
         const localVersion = getLocalVersion();
+
+        // Cache POR SESSÃO: a versão instalada não muda durante a sessão, então
+        // basta checar 1× por abertura do app. Evita a leitura de config/driverApp
+        // (e o round-trip que travava a home) em toda navegação de volta à home.
+        // Guardamos a versão validada — se o app for atualizado, o valor não bate
+        // e revalida. Só cacheamos o "ok"; se bloquear, segue checando (não seta).
+        try {
+            if (sessionStorage.getItem('pedrad_update_ok') === localVersion) {
+                return true;
+            }
+        } catch (_) {}
+
+        const remote = await loadRemoteConfig();
         const minVersion = remote.minVersion || FALLBACK.minVersion;
         if (compareVersions(localVersion, minVersion) < 0) {
             showUpdateGate(remote);
             return false;
         }
+        try { sessionStorage.setItem('pedrad_update_ok', localVersion); } catch (_) {}
         return true;
     }
 
