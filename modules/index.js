@@ -18,7 +18,7 @@ async function sendToTokens(tokens, payload) {
                 notification: payload.notification || undefined,
                 android: {
                     priority: "high",
-                    notification: { channelId: "pedrad_orders", sound: "default" }
+                    notification: { channelId: "pedra_default", sound: "default" }
                 },
                 webpush: {
                     headers: { Urgency: "high", TTL: "86400" },
@@ -52,6 +52,20 @@ async function cleanInvalidTokens(collection, docId, invalidTokens) {
         });
         console.log(`Limpou ${invalidTokens.length} tokens de ${collection}/${docId}`);
     } catch (e) { /* ignore */ }
+}
+
+function getDriverStoreIds(driver) {
+    const ids = new Set();
+    if (driver.linkedStoreId) ids.add(String(driver.linkedStoreId));
+    if (driver.storeId) ids.add(String(driver.storeId));
+    if (Array.isArray(driver.linkedStores)) {
+        driver.linkedStores.filter(Boolean).forEach(id => ids.add(String(id)));
+    }
+    return ids;
+}
+
+function isStoreBoundDriver(driver) {
+    return getDriverStoreIds(driver).size > 0;
 }
 
 // ==================== 1. NOVO PEDIDO → NOTIFICA LOJA ====================
@@ -114,7 +128,8 @@ exports.onOrderUpdate = functions.firestore
 
         // ---- A) Pedido precisa de entregador → notifica drivers online ----
         if (!after.driverId &&
-            after.deliveryMode !== "pickup" &&
+            after.orderType === "delivery" &&
+            ["store", "app"].includes(after.deliveryPool) &&
             ["preparing", "ready"].includes(after.status)) {
 
             promises.push(notifyAvailableDrivers(after, orderId));
@@ -159,6 +174,11 @@ async function notifyAvailableDrivers(order, orderId) {
         driversSnap.docs.forEach(doc => {
             const d = doc.data();
             const tokens = d.fcmTokens || [];
+            const linkedStores = getDriverStoreIds(d);
+            const isLinked = order.storeId && linkedStores.has(String(order.storeId));
+            if (order.deliveryPool === "store" && !isLinked) return;
+            if (order.deliveryPool === "app" && isStoreBoundDriver(d)) return;
+
             tokens.forEach(t => {
                 allTokens.push(t);
                 tokenOwners[t] = doc.id;
