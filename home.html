@@ -19,6 +19,11 @@
 <body>
     <div class="toast" id="toast"></div>
 
+    <!-- Puxar para atualizar (força refresh de tudo) -->
+    <div id="ptrIndicator" style="position:fixed;top:0;left:0;right:0;display:flex;align-items:center;justify-content:center;height:0;overflow:hidden;color:var(--text-muted,#8a8a8a);font-size:.82rem;font-weight:600;z-index:90;transition:height .18s ease;pointer-events:none;background:var(--bg,#0a0a0a)">
+        <span id="ptrText">↓ Puxe para atualizar</span>
+    </div>
+
     <header class="header">
         <a class="app-brand" href="home.html" aria-label="Pedra Delivery">
             <span class="app-brand-mark"><img src="icon-192.png" alt=""></span>
@@ -179,6 +184,7 @@
 
         setupListeners();
         setupDriverPushNotifications({ requestPermission: false });
+        setupPullToRefresh();
 
         if (IdleDriver.isStoreDriver()) {
             await IdleDriver.init();
@@ -187,6 +193,55 @@
             document.getElementById('idleStatusBox').style.display = 'block';
         }
     });
+
+    // ── Puxar para atualizar (pull-to-refresh) ────────────────────────────
+    // Força a atualização de TUDO: limpa os caches voláteis e recarrega, então
+    // refaz auth, fees/config/histórico e re-ataca os listeners de pedidos.
+    // Escape para quando um listener morre e não recupera sozinho.
+    async function forceRefresh() {
+        try {
+            Cache.remove('history');
+            Cache.remove('fees');
+            Cache.remove('config');
+            localStorage.removeItem('pedrad_auth_checked_at');
+        } catch (_) {}
+        window.location.reload();
+    }
+
+    function setupPullToRefresh() {
+        const ind = document.getElementById('ptrIndicator');
+        const txt = document.getElementById('ptrText');
+        if (!ind || !txt) return;
+        const THRESHOLD = 70;
+        let startY = 0, pulling = false, dist = 0;
+        const atTop = () => (window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0) <= 0;
+
+        window.addEventListener('touchstart', (e) => {
+            if (!atTop() || !e.touches || !e.touches.length) { pulling = false; return; }
+            startY = e.touches[0].clientY;
+            pulling = true; dist = 0;
+        }, { passive: true });
+
+        window.addEventListener('touchmove', (e) => {
+            if (!pulling || !e.touches || !e.touches.length) return;
+            dist = e.touches[0].clientY - startY;
+            if (dist <= 0) { ind.style.height = '0'; return; }
+            ind.style.height = Math.min(64, dist * 0.5) + 'px';
+            txt.textContent = dist > THRESHOLD ? '↻ Solte para atualizar' : '↓ Puxe para atualizar';
+        }, { passive: true });
+
+        window.addEventListener('touchend', () => {
+            if (!pulling) return;
+            pulling = false;
+            if (dist > THRESHOLD) {
+                ind.style.height = '44px';
+                txt.textContent = '↻ Atualizando...';
+                forceRefresh();
+            } else {
+                ind.style.height = '0';
+            }
+        });
+    }
     </script>
 </body>
 </html>
