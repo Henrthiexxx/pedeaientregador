@@ -58,6 +58,7 @@ async function syncDriverRoutingMeta(driver) {
 // ==================== AUTH CHECK ====================
 
 let _driverSessionTimer = null;
+let _lastGuardCheck = 0;
 
 function isDriverSessionRevoked(driver) {
     return driver?.status === 'blocked' || !!driver?.sessionRevokedAt;
@@ -140,22 +141,25 @@ async function loadAuthenticatedDriver() {
     }
 }
 
+// Cada checagem faz getIdToken(true) + 1 read do doc do entregador. Antes rodava
+// a cada foco/visibilitychange (tempestade de refresh/reads ao alternar abas).
+// Agora limitamos a no máx. 1×/60s (foco/visibilidade), mantendo a checagem
+// periódica de 60s. Reduz leituras/latência sem perder a validação de sessão.
+async function runSessionGuardCheck(driverId, force = false) {
+    const nowTs = Date.now();
+    if (!force && (nowTs - _lastGuardCheck) < 60000) return;
+    _lastGuardCheck = nowTs;
+    const next = await loadAuthenticatedDriver();
+    if (!next || next.id !== driverId) logoutDriverSession();
+}
+
 function startDriverSessionGuard(driverId) {
     if (_driverSessionTimer) return;
-    _driverSessionTimer = setInterval(async () => {
-        const next = await loadAuthenticatedDriver();
-        if (!next || next.id !== driverId) logoutDriverSession();
-    }, 60000);
-    window.addEventListener('focus', async () => {
-        const next = await loadAuthenticatedDriver();
-        if (!next || next.id !== driverId) logoutDriverSession();
-    });
+    _lastGuardCheck = Date.now(); // acabou de validar no checkAuth inicial
+    _driverSessionTimer = setInterval(() => runSessionGuardCheck(driverId, true), 60000);
+    window.addEventListener('focus', () => runSessionGuardCheck(driverId));
     document.addEventListener('visibilitychange', () => {
-        if (!document.hidden) {
-            loadAuthenticatedDriver().then((next) => {
-                if (!next || next.id !== driverId) logoutDriverSession();
-            });
-        }
+        if (!document.hidden) runSessionGuardCheck(driverId);
     });
 }
 
