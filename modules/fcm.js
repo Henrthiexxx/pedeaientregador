@@ -8,6 +8,8 @@ const FCMModule = {
     basePath: null,
     initPromise: null,
     listenersRegistered: false,
+    cacheVersion: '2026-06-25-1',
+    cachePrefixes: ['pedrad-v', 'pedrad-driver-v'],
 
     async init() {
         if (this.initPromise) return this.initPromise;
@@ -23,9 +25,13 @@ const FCMModule = {
         }
         try {
             this.basePath = location.pathname.substring(0, location.pathname.lastIndexOf('/') + 1);
-            this.swReg = await navigator.serviceWorker.register(this.basePath + 'firebase-messaging-sw.js', {
+            await this.cleanupLegacyServiceWorkers();
+            const registration = await navigator.serviceWorker.register(this.basePath + 'firebase-messaging-sw.js', {
                 scope: this.basePath
             });
+            this.swReg = await this.waitForActiveWorker(registration);
+            await this.activateWaitingWorker();
+            await this.cleanupLegacyCaches();
             console.log('✅ SW registrado em', this.basePath);
 
             this.messaging = firebase.messaging();
@@ -51,6 +57,85 @@ const FCMModule = {
             this.initPromise = null;
             return false;
         }
+    },
+
+    async cleanupLegacyServiceWorkers() {
+        if (!navigator.serviceWorker?.getRegistrations) return;
+
+        const expectedScriptSuffix = this.basePath + 'firebase-messaging-sw.js';
+        const registrations = await navigator.serviceWorker.getRegistrations();
+
+        await Promise.all(registrations.map(async (registration) => {
+            const scopeUrl = new URL(registration.scope);
+            if (scopeUrl.origin !== location.origin) return;
+
+            const scriptUrl = registration.active?.scriptURL
+                || registration.waiting?.scriptURL
+                || registration.installing?.scriptURL
+                || '';
+
+            const inAppScope = scopeUrl.pathname === this.basePath
+                || scopeUrl.pathname.startsWith(this.basePath);
+            const isLegacyScript = scriptUrl.includes('/service-worker.js')
+                || scriptUrl.includes('/sw.js');
+            const isUnexpectedScope = scopeUrl.pathname !== this.basePath && inAppScope;
+            const isUnexpectedScript = scriptUrl && !scriptUrl.endsWith(expectedScriptSuffix);
+
+            if (isLegacyScript || isUnexpectedScope || (inAppScope && isUnexpectedScript)) {
+                await registration.unregister().catch(() => {});
+            }
+        }));
+    },
+
+    async waitForActiveWorker(registration) {
+        if (registration?.active) return registration;
+
+        const readyRegistration = await navigator.serviceWorker.ready;
+        if (readyRegistration?.active) {
+            return readyRegistration;
+        }
+
+        return new Promise((resolve, reject) => {
+            const candidate = registration?.installing || registration?.waiting;
+            if (!candidate) {
+                reject(new Error('Service Worker sem worker ativo'));
+                return;
+            }
+
+            const timeoutId = setTimeout(() => {
+                reject(new Error('Timeout aguardando ativação do Service Worker'));
+            }, 15000);
+
+            candidate.addEventListener('statechange', () => {
+                if (candidate.state === 'activated') {
+                    clearTimeout(timeoutId);
+                    resolve(registration);
+                }
+            });
+        });
+    },
+
+    async activateWaitingWorker() {
+        if (!this.swReg?.waiting) return;
+
+        this.swReg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        await navigator.serviceWorker.ready.catch(() => {});
+    },
+
+    async cleanupLegacyCaches() {
+        if (!('caches' in window)) return;
+
+        const activeNames = new Set([
+            'pedrad-driver-v' + this.cacheVersion,
+            'pedrad-v' + this.cacheVersion
+        ]);
+
+        const names = await caches.keys();
+        await Promise.all(names.map(async (name) => {
+            const matchesPrefix = this.cachePrefixes.some(prefix => name.startsWith(prefix));
+            if (!matchesPrefix || activeNames.has(name)) return;
+            await caches.delete(name).catch(() => {});
+        }));
     },
 
     async requestPermissionAndGetToken(requestPermission = true) {
@@ -107,6 +192,39 @@ const FCMModule = {
                 fcmTokens: firebase.firestore.FieldValue.arrayRemove(this.token)
             }, { merge: true });
         } catch (err) {}
+    },
+
+    // ==================== TOKEN NATIVO (APK) ====================
+    // O APK entrega o token FCM nativo via window.PedradNative.onAndroidToken().
+    // É esse token que entrega a notificação com o app FECHADO (o token web/SW só
+    // entrega com o WebView vivo). Aqui salvamos em drivers/{id}.fcmTokens — o JS
+    // está autenticado, então a regra permite a escrita.
+    androidToken: null,
+
+    isNativeApp() {
+        try { return !!(window.Android && typeof window.Android.isNativeApp === 'function' && window.Android.isNativeApp()); }
+        catch (e) { return false; }
+    },
+
+    setAndroidToken(token) {
+        if (!token) return;
+        this.androidToken = token;
+        this.saveAndroidTokenToFirestore();
+    },
+
+    async saveAndroidTokenToFirestore() {
+        if (!this.androidToken) return;
+        // Precisa estar logado (auth confirmado) para a regra permitir a escrita.
+        if (typeof driverData === 'undefined' || !driverData || !driverData.id) return;
+        try {
+            await db.collection('drivers').doc(driverData.id).set({
+                fcmTokens: firebase.firestore.FieldValue.arrayUnion(this.androidToken),
+                lastTokenUpdate: firebase.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+            console.log('🔑 Token NATIVO (Android) salvo em drivers/' + driverData.id);
+        } catch (err) {
+            console.error('Erro salvar token nativo:', err);
+        }
     },
 
     // ==================== FOREGROUND NOTIFICATIONS ====================
@@ -186,6 +304,15 @@ const FCMModule = {
 // ==================== SETUP FUNCTIONS ====================
 
 async function setupDriverPushNotifications(options = {}) {
+    // App NATIVO (APK): a entrega confiável com o app fechado é via token NATIVO
+    // (FirebaseMessagingService), entregue pelo PedradNative.onAndroidToken. Não
+    // usamos o token web (Service Worker só entrega com o WebView vivo) — isso
+    // era a fonte da fragilidade e evita notificação dupla.
+    if (FCMModule.isNativeApp()) {
+        await FCMModule.saveAndroidTokenToFirestore(); // salva o token nativo já entregue (se houver)
+        return;
+    }
+
     const requestPermission = options.requestPermission !== false;
     const initialized = await FCMModule.init();
     if (!initialized) return;
@@ -194,6 +321,13 @@ async function setupDriverPushNotifications(options = {}) {
         await FCMModule.saveTokenToFirestore(driverData.id, 'driver');
     }
 }
+
+// Ponte APK → Web: o nativo chama isto no onPageFinished com o token FCM nativo.
+// Guardamos e salvamos assim que o login estiver pronto (setupDriverPushNotifications).
+window.PedradNative = window.PedradNative || {};
+window.PedradNative.onAndroidToken = function (token) {
+    try { FCMModule.setAndroidToken(token); } catch (e) { console.error('onAndroidToken:', e); }
+};
 
 async function setupClientPushNotifications() {
     const initialized = await FCMModule.init();
