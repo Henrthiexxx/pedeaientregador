@@ -174,16 +174,25 @@ async function checkAuth() {
     const cached = Cache.getDriver();
     const cachedId = Cache.getDriverId();
     if (cached && cachedId && cached.id === cachedId) {
-        driverData = cached;
-        startDriverSessionGuard(cachedId);
+        // A sessão Firebase PRECISA estar restaurada antes de liberar, senão as
+        // leituras/listeners da página rodam sem auth → permission-denied.
+        // waitForAuthUser() é LOCAL/rápido (restaura sessão persistida, sem rede);
+        // só pulamos o getIdToken(true) forçado + a leitura do doc (custos de rede).
+        const auth = firebase.auth?.();
+        const user = auth?.currentUser || await waitForAuthUser();
+        if (user && user.uid) {
+            driverData = cached;
+            startDriverSessionGuard(cachedId);
 
-        const lastAt = Number(localStorage.getItem('pedrad_auth_checked_at') || 0);
-        if (Date.now() - lastAt > 60000) {
-            loadAuthenticatedDriver().then((fresh) => {
-                if (!fresh || fresh.id !== cachedId) logoutDriverSession();
-            }).catch(() => {});
+            const lastAt = Number(localStorage.getItem('pedrad_auth_checked_at') || 0);
+            if (Date.now() - lastAt > 60000) {
+                loadAuthenticatedDriver().then((fresh) => {
+                    if (!fresh || fresh.id !== cachedId) logoutDriverSession();
+                }).catch(() => {});
+            }
+            return true;
         }
-        return true;
+        // Sem sessão restaurada → cai para a validação completa abaixo.
     }
 
     // ── 1ª vez (sem cache) ou pós-logout: valida de verdade antes de liberar.
