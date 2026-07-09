@@ -117,6 +117,54 @@ function updateIdleUI() {
     }
 }
 
+// ==================== ORDER BREAKDOWN (detalhes p/ o entregador) ====================
+const PAYMENT_LABELS = {
+    pix: 'PIX',
+    credit: 'Cartão de crédito',
+    debit: 'Cartão de débito',
+    cash: 'Dinheiro',
+    picpay: 'Picpay Alimentação'
+};
+
+function buildOrderBreakdownHtml(order) {
+    const items = Array.isArray(order?.items) ? order.items : [];
+
+    const itemsHtml = items.map(it => {
+        const qty = Number(it.qty) || 1;
+        const addons = Array.isArray(it.addons) ? it.addons : [];
+        const addonsSum = addons.reduce((s, a) => s + (Number(a.price) || 0), 0);
+        const lineTotal = ((Number(it.price) || 0) + addonsSum) * qty;
+        const addonsHtml = addons.map(a =>
+            `<div class="ob-addon">+ ${escapeHtml(a.name || '')}${a.price ? ' (' + formatCurrency(Number(a.price) || 0) + ')' : ''}</div>`
+        ).join('');
+        const obs = it.observation ? `<div class="ob-obs">"${escapeHtml(it.observation)}"</div>` : '';
+        return `<div class="ob-item"><span><span class="ob-q">${qty}× </span>${escapeHtml(it.name || 'Item')}</span><span>${formatCurrency(lineTotal)}</span></div>${addonsHtml}${obs}`;
+    }).join('');
+
+    const subtotal = Number(order?.subtotal) || 0;
+    const deliveryFee = Number(order?.deliveryFee) || 0;
+    const discount = Number(order?.discount) || 0;
+    const total = Number(order?.total) || (subtotal + deliveryFee - discount);
+
+    const payLabel = PAYMENT_LABELS[order?.paymentMethod] || (order?.paymentMethod || '');
+    const payHtml = payLabel
+        ? `<div class="ob-pay"><span>Pagamento</span><span>${escapeHtml(payLabel)}</span></div>` : '';
+    const changeHtml = (order?.paymentMethod === 'cash' && Number(order?.changeFor) > 0)
+        ? `<div class="ob-pay"><span>Troco para</span><span>${formatCurrency(Number(order.changeFor))}</span></div>` : '';
+
+    return `
+    <div class="order-breakdown">
+        <div class="ob-title">Itens do pedido</div>
+        ${itemsHtml || '<div class="ob-item"><span>—</span></div>'}
+        <div class="ob-sep"></div>
+        <div class="ob-row"><span>Produtos</span><span>${formatCurrency(subtotal)}</span></div>
+        ${deliveryFee ? `<div class="ob-row"><span>Taxa de entrega</span><span>${formatCurrency(deliveryFee)}</span></div>` : ''}
+        ${discount ? `<div class="ob-row"><span>Desconto</span><span>- ${formatCurrency(discount)}</span></div>` : ''}
+        <div class="ob-row total"><span>Total</span><span>${formatCurrency(total)}</span></div>
+        ${payHtml}${changeHtml}
+    </div>`;
+}
+
 // ==================== RENDER ====================
 function renderAvailableOrders() {
     const container     = document.getElementById('availableDeliveries');
@@ -286,6 +334,7 @@ function renderAcceptedOrders() {
                         <div class="address-text">${street}, ${number} - ${neighborhood}</div>
                     </div>
                 </div>
+                ${buildOrderBreakdownHtml(order)}
                 <div class="delivery-actions">
                     ${canPickup
                         ? `<button class="btn btn-warning" onclick="startDelivery('${order.id}')" style="flex:1;">Iniciar Retirada</button>`
@@ -378,6 +427,7 @@ function buildDeliveryCardHtml(order, index, total) {
                 <button class="btn btn-primary btn-sm" onclick="copyClientField('all','${orderId}')">Copiar tudo</button>
             </div>
         </div>
+        ${buildOrderBreakdownHtml(order)}
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding:12px;background:var(--bg-input);border-radius:8px;border:1px solid var(--border);">
             <span style="color:var(--text-muted);font-size:0.85rem;">Seu ganho</span>
             <span style="font-weight:500;color:var(--primary);">${formatCurrency(earning)}</span>
@@ -446,6 +496,7 @@ function acceptOrder(orderId) {
     document.getElementById('acceptModalText').textContent =
         `${pendingAcceptOrder.storeName} → ${pendingAcceptOrder.address?.neighborhood}`;
     document.getElementById('acceptModalInfo').innerHTML = `
+        ${buildOrderBreakdownHtml(pendingAcceptOrder)}
         <div style="display:flex;justify-content:space-between;">
             <span>Taxa de entrega</span><span>${formatCurrency(fee)}</span>
         </div>

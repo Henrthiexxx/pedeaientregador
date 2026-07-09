@@ -1,7 +1,7 @@
 /* ==================== PEDRA DELIVERY SERVICE WORKER (CACHE + FCM) ==================== */
 /* ÚNICO SW por scope: PWA cache + Firebase Messaging */
 
-const CACHE_VERSION = '2026-06-25-1';
+const CACHE_VERSION = '2026-07-08-1';
 const CACHE_NAME = 'pedrad-driver-v' + CACHE_VERSION;
 
 // Path dinâmico — funciona em qualquer subdiretório
@@ -70,21 +70,23 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
+    // Assets estáticos do app (JS/CSS/imagens/fontes): CACHE-FIRST
+    // (stale-while-revalidate). Serve na hora a partir do cache e revalida em
+    // segundo plano → a home não "carrega do zero" a cada navegação. O Firestore
+    // e o FCM não passam por aqui (excluídos acima), então os listeners de pedido
+    // seguem sempre ao vivo. Trocas de versão do app: bump em CACHE_VERSION limpa
+    // o cache antigo no 'activate' e força o refetch.
     event.respondWith((async () => {
-        try {
-            const response = await fetch(req);
-            if (response && response.ok) {
-                const clone = response.clone();
-                const cache = await caches.open(CACHE_NAME);
-                cache.put(req, clone).catch(() => {});
-            }
+        const cache = await caches.open(CACHE_NAME);
+        const cached = await cache.match(req);
+        const network = fetch(req).then((response) => {
+            if (response && response.ok) cache.put(req, response.clone()).catch(() => {});
             return response;
-        } catch (err) {
-            return (await caches.match(req)) || new Response('Offline', {
-                status: 503,
-                statusText: 'Service Unavailable'
-            });
-        }
+        }).catch(() => null);
+        return cached || (await network) || new Response('Offline', {
+            status: 503,
+            statusText: 'Service Unavailable'
+        });
     })());
 });
 

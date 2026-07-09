@@ -631,18 +631,21 @@ body{
     display:none;position:fixed;inset:0;
     background:var(--overlay);z-index:200;
     align-items:center;justify-content:center;padding:20px;
-    backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);
+    /* Sem backdrop-filter no overlay: blur aninhado (overlay + .modal-content)
+       causava piscada/double-paint no WebView. O blur fica só no conteúdo. */
 }
-.modal.active{display:flex;animation:overlayIn .3s ease}
+.modal.active{display:flex;animation:overlayIn .22s ease}
 @keyframes overlayIn{from{opacity:0}to{opacity:1}}
 .modal-content{
     background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur));
     border-radius:var(--radius-xl);padding:28px 22px;
     width:100%;max-width:380px;text-align:center;
     border:1px solid var(--glass-border);box-shadow:var(--glass-shadow);
-    animation:modalIn .35s var(--bounce);
+    animation:modalIn .32s var(--bounce);
 }
-@keyframes modalIn{from{opacity:0;transform:scale(.9) translateY(10px)}to{opacity:1;transform:none}}
+/* Só transform: a opacidade já é feita uma única vez pelo overlayIn do overlay.
+   Animar opacity aqui também gerava o efeito de "aparecer 2x". */
+@keyframes modalIn{from{transform:scale(.94) translateY(8px)}to{transform:none}}
 .modal-icon{font-size:1.8rem;margin-bottom:18px;color:var(--accent)}
 .modal-title{font-size:1.05rem;font-weight:700;margin-bottom:8px;letter-spacing:-.01em}
 .modal-text{color:var(--text-secondary);margin-bottom:18px;font-size:.88rem;white-space:pre-line;line-height:1.5}
@@ -650,6 +653,21 @@ body{
     background:var(--bg-input);padding:14px;border-radius:10px;
     margin-bottom:20px;font-size:.84rem;border:1px solid var(--border);
 }
+
+/* ── Detalhes do pedido (produtos + valores) mostrados ao entregador ── */
+.order-breakdown{
+    background:var(--bg-input);padding:12px 14px;border-radius:10px;
+    margin:14px 0;border:1px solid var(--border);font-size:.84rem;text-align:left;
+}
+.ob-title{font-size:.66rem;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px}
+.ob-item{display:flex;justify-content:space-between;gap:10px;padding:3px 0;color:var(--text)}
+.ob-item .ob-q{color:var(--text-muted);font-variant-numeric:tabular-nums}
+.ob-addon{font-size:.76rem;color:var(--text-muted);padding-left:14px}
+.ob-obs{font-size:.74rem;color:var(--text-muted);font-style:italic;padding-left:14px}
+.ob-sep{height:1px;background:var(--border);margin:9px 0}
+.ob-row{display:flex;justify-content:space-between;padding:2px 0;color:var(--text-secondary)}
+.ob-row.total{color:var(--text);font-weight:700;font-size:.92rem;margin-top:3px}
+.ob-pay{margin-top:9px;padding-top:9px;border-top:1px solid var(--border);font-size:.8rem;color:var(--text-muted);display:flex;justify-content:space-between}
 .modal-actions{display:flex;gap:10px}
 .modal-actions .btn{flex:1}
 
@@ -668,6 +686,7 @@ body{
 
 /* ==================== TOAST (glass) ==================== */
 .toast{
+    pointer-events:none; /* nunca intercepta clique — antes travava os botões do meio do menu */
     position:fixed;bottom:calc(86px + env(safe-area-inset-bottom));
     left:50%;transform:translateX(-50%) translateY(80px);
     background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur));
