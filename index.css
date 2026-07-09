@@ -824,3 +824,9 @@ body{
     .stats-row,.earnings-stats{grid-template-columns:repeat(3,1fr)}
     .page{max-width:760px;margin:0 auto}
 }
+
+/* ==================== PRIORIDADE: VELOCIDADE ====================
+   App do entregador foca em velocidade: sem transições e sem animações de
+   popup/modal. (Animações funcionais de estado — spinner — permanecem.) */
+*,*::before,*::after{ transition:none !important; }
+.modal,.modal.active,.modal-content,.nav-map-popup,.nav-map-popup.active{ animation:none !important; }

@@ -590,9 +590,13 @@
 
     // ==================== INIT ====================
     document.addEventListener('DOMContentLoaded', async () => {
+        // Pinta do cache ANTES de qualquer await — sem tela zerada ao voltar.
+        renderBottomNav('profile.html');
+        const cd = Cache.getDriver();
+        if (cd) { driverData = cd; updateProfileUI(); }
+
         const ok = await checkAuth();
         if (!ok) return;
-        renderBottomNav('profile.html');
         setupDriverPushNotifications({ requestPermission: false });
         await ensureDriverToken();
         updateProfileUI();
