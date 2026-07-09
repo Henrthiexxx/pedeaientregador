@@ -133,6 +133,7 @@ async function loadAuthenticatedDriver() {
         driverData = normalizeDriverData(data);
         Cache.setDriver(driverData);
         Cache.setDriverId(driverData.id);
+        try { localStorage.setItem('pedrad_auth_checked_at', String(Date.now())); } catch (_) {}
         syncDriverRoutingMeta(driverData).catch(() => {});
         return driverData;
     } catch (e) {
@@ -164,6 +165,28 @@ function startDriverSessionGuard(driverId) {
 }
 
 async function checkAuth() {
+    // ── Caminho rápido (cache-first) ──────────────────────────────────────
+    // Se já temos o entregador em cache, libera a navegação NA HORA — sem
+    // forçar refresh de token nem reler o doc a cada troca de página (era a
+    // "lentidão enorme"). A validação real só roda em 2º plano, e apenas se
+    // passou >60s desde a última (persistida em localStorage) — economiza
+    // leituras e não bloqueia. O guard periódico também revalida.
+    const cached = Cache.getDriver();
+    const cachedId = Cache.getDriverId();
+    if (cached && cachedId && cached.id === cachedId) {
+        driverData = cached;
+        startDriverSessionGuard(cachedId);
+
+        const lastAt = Number(localStorage.getItem('pedrad_auth_checked_at') || 0);
+        if (Date.now() - lastAt > 60000) {
+            loadAuthenticatedDriver().then((fresh) => {
+                if (!fresh || fresh.id !== cachedId) logoutDriverSession();
+            }).catch(() => {});
+        }
+        return true;
+    }
+
+    // ── 1ª vez (sem cache) ou pós-logout: valida de verdade antes de liberar.
     const current = await loadAuthenticatedDriver();
     if (current) {
         startDriverSessionGuard(current.id);
